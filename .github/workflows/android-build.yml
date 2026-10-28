@@ -1,0 +1,155 @@
+name: Android Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.3"
+  ANDROID_BUILD_TOOLS: "34.0.0"
+  ANDROID_PLATFORM: "android-34"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      HAS_RELEASE_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar Godot e templates de exportação
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          curl -fsSL -o godot.zip "$BASE/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          curl -fsSL -o templates.tpz "$BASE/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          unzip -q templates.tpz
+          mv templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          godot --version
+
+      - name: Instalar componentes do Android SDK
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_SDK=$SDK" >> "$GITHUB_ENV"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platform-tools" "build-tools;${ANDROID_BUILD_TOOLS}" "platforms;${ANDROID_PLATFORM}" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
+
+      - name: Keystore de debug e configuração do editor Godot
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/godot"
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+            -keystore "$HOME/debug.keystore" -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          for f in editor_settings-4.3.tres editor_settings-4.tres; do
+            cat > "$HOME/.config/godot/$f" <<SETTINGS
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_SDK"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$HOME/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          SETTINGS
+          done
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$HOME/debug.keystore" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
+
+      - name: Importar recursos do projeto
+        run: |
+          mkdir -p build/logs
+          godot --headless --path . --import 2>&1 | tee build/logs/import.log || true
+          godot --headless --path . --import 2>&1 | tee -a build/logs/import.log
+
+      - name: Verificar sintaxe dos scripts
+        run: |
+          status=0
+          while IFS= read -r f; do
+            rel="${f#./}"
+            if ! godot --headless --path . --check-only --script "res://$rel" > build/logs/check.tmp 2>&1; then
+              echo "::error file=$rel::erro de sintaxe GDScript"
+              cat build/logs/check.tmp
+              status=1
+            fi
+          done < <(find . -name '*.gd' -not -path './.godot/*' -not -path './build/*')
+          exit $status
+
+      - name: Testes automatizados
+        run: godot --headless --path . -s res://tests/run_tests.gd 2>&1 | tee build/logs/tests.log
+
+      - name: Exportar APK de debug
+        run: |
+          godot --headless --path . --export-debug "Android" "$GITHUB_WORKSPACE/build/motorcycle-game-debug.apk" 2>&1 | tee build/logs/export.log
+
+      - name: Validar APK
+        run: |
+          set -euo pipefail
+          APK=build/motorcycle-game-debug.apk
+          test -f "$APK" || { echo "::error::APK não foi gerado"; tail -n 50 build/logs/export.log; exit 1; }
+          SIZE=$(stat -c%s "$APK")
+          echo "Tamanho do APK: $SIZE bytes"
+          test "$SIZE" -gt 1000000 || { echo "::error::APK pequeno demais"; exit 1; }
+          unzip -l "$APK" | grep -q "AndroidManifest.xml" || { echo "::error::APK sem AndroidManifest.xml"; exit 1; }
+
+      - name: Empacotar código-fonte (ZIP)
+        run: git archive --format=zip --prefix=motorcycle-game/ -o build/motorcycle-game-source.zip HEAD
+
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: motorcycle-game-debug-apk
+          path: build/motorcycle-game-debug.apk
+          if-no-files-found: error
+
+      - name: Publicar ZIP do código-fonte
+        uses: actions/upload-artifact@v4
+        with:
+          name: motorcycle-game-source
+          path: build/motorcycle-game-source.zip
+          if-no-files-found: error
+
+      - name: APK de release assinado (opcional, só com Secrets)
+        if: env.HAS_RELEASE_KEYSTORE == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          export GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$RUNNER_TEMP/release.keystore"
+          godot --headless --path . --export-release "Android" "$GITHUB_WORKSPACE/build/motorcycle-game-release.apk" 2>&1 | tee build/logs/export-release.log
+          rm -f "$RUNNER_TEMP/release.keystore"
+
+      - name: Publicar APK de release
+        if: env.HAS_RELEASE_KEYSTORE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: motorcycle-game-release-apk
+          path: build/motorcycle-game-release.apk
+          if-no-files-found: error
+
+      - name: Publicar logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/logs/
+          if-no-files-found: ignore
