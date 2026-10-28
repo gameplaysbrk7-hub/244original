@@ -14,10 +14,16 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] F.TRAS baixa a dianteira durante o grau
 - [ ] Acelerar demais no grau derruba a moto para trás (QUEDA!) e ela volta sozinha
 - [ ] VOLTAR reposiciona a moto no início
+- [ ] EQUIL durante o grau segura a dianteira num ângulo estável
+- [ ] Freio dianteiro forte em velocidade levanta a traseira (stoppie); em velocidade muito alta derruba
+- [ ] DERRAP + ACEL parado faz borrachão (fumaça, giro no lugar)
+- [ ] DERRAP em curva em velocidade faz a moto escorregar de lado
+- [ ] Frear forte com a dianteira inclinando em alta velocidade derruba a moto
 
 ## Câmera
 - [ ] Arrastar com um dedo fora dos botões gira 360° e ajusta a altura
 - [ ] Pinça com dois dedos muda a distância
+- [ ] VISÃO alterna entre 3ª e 1ª pessoa (1ª não pode ficar dentro do capacete)
 - [ ] CÂM restaura a posição padrão
 - [ ] Câmera não atravessa prédios nem muros
 - [ ] Fechar e reabrir o jogo mantém distância e altura da câmera

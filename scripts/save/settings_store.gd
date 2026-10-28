@@ -7,6 +7,7 @@ const PATH := "user://settings.cfg"
 var camera_distance: float = 4.6
 var camera_pitch: float = 18.0
 var camera_yaw_offset: float = 0.0
+var camera_first_person: bool = false
 var steer_sensitivity: float = 1.0
 var control_opacity: float = 0.55
 
@@ -22,6 +23,8 @@ func load_settings() -> bool:
 	camera_distance = clampf(_num(cfg, "camera", "distance", camera_distance), 2.5, 9.0)
 	camera_pitch = clampf(_num(cfg, "camera", "pitch", camera_pitch), 5.0, 60.0)
 	camera_yaw_offset = clampf(_num(cfg, "camera", "yaw_offset", camera_yaw_offset), -TAU, TAU)
+	var fp: Variant = cfg.get_value("camera", "first_person", false)
+	camera_first_person = fp if typeof(fp) == TYPE_BOOL else false
 	steer_sensitivity = clampf(_num(cfg, "controls", "steer_sensitivity", steer_sensitivity), 0.4, 2.0)
 	control_opacity = clampf(_num(cfg, "controls", "opacity", control_opacity), 0.15, 1.0)
 	return true
@@ -32,6 +35,7 @@ func save_settings() -> bool:
 	cfg.set_value("camera", "distance", camera_distance)
 	cfg.set_value("camera", "pitch", camera_pitch)
 	cfg.set_value("camera", "yaw_offset", camera_yaw_offset)
+	cfg.set_value("camera", "first_person", camera_first_person)
 	cfg.set_value("controls", "steer_sensitivity", steer_sensitivity)
 	cfg.set_value("controls", "opacity", control_opacity)
 	return cfg.save(PATH) == OK

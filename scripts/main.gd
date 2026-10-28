@@ -36,6 +36,7 @@ func _ready() -> void:
 	cam.distance = settings.camera_distance
 	cam.pitch_deg = settings.camera_pitch
 	cam.yaw_offset = settings.camera_yaw_offset
+	cam.first_person = settings.camera_first_person
 	cam.snap()
 
 	var ui := CanvasLayer.new()
@@ -55,6 +56,8 @@ func _ready() -> void:
 	touch.camera_reset_pressed.connect(_reset_camera)
 	touch.respawn_pressed.connect(bike.respawn)
 	touch.pause_pressed.connect(_toggle_pause)
+	touch.view_toggle_pressed.connect(_toggle_view)
+	bike.stoppie_finished.connect(hud.show_stoppie_result)
 	bike.wheelie_finished.connect(hud.show_wheelie_result)
 	bike.crashed.connect(hud.show_message.bind("QUEDA!"))
 
@@ -71,6 +74,9 @@ func _physics_process(_delta: float) -> void:
 	bike.input_brake_rear = 1.0 if (touch.brake_rear or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)) else 0.0
 	bike.input_steer = touch.steer if absf(touch.steer) > 0.01 else kb_steer
 	bike.input_wheelie = touch.wheelie or Input.is_key_pressed(KEY_SPACE)
+	bike.input_balance = touch.balance or Input.is_key_pressed(KEY_B)
+	bike.input_drift = touch.drift or Input.is_key_pressed(KEY_X)
+	cam.view_pitch = bike.pitch - bike.stoppie
 
 
 func _process(_delta: float) -> void:
@@ -84,11 +90,18 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				bike.respawn()
 			KEY_C:
 				_reset_camera()
+			KEY_V:
+				_toggle_view()
 
 
 func _toggle_pause() -> void:
 	get_tree().paused = not get_tree().paused
 	hud.set_paused(get_tree().paused)
+	_save_camera()
+
+
+func _toggle_view() -> void:
+	cam.toggle_view()
 	_save_camera()
 
 
@@ -101,6 +114,7 @@ func _save_camera() -> void:
 	settings.camera_distance = cam.distance
 	settings.camera_pitch = cam.pitch_deg
 	settings.camera_yaw_offset = cam.yaw_offset
+	settings.camera_first_person = cam.first_person
 	settings.save_settings()
 
 

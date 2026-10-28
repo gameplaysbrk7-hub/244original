@@ -8,12 +8,15 @@ signal camera_drag_ended
 signal camera_reset_pressed
 signal respawn_pressed
 signal pause_pressed
+signal view_toggle_pressed
 
 var steer: float = 0.0
 var throttle: float = 0.0
 var brake_front: bool = false
 var brake_rear: bool = false
 var wheelie: bool = false
+var balance: bool = false
+var drift: bool = false
 var ui_opacity: float = 0.55
 var steer_sensitivity: float = 1.0
 
@@ -43,6 +46,9 @@ func _layout() -> Dictionary:
 		"wheelie": {"c": Vector2(s.x - 1.4 * r, s.y - 4.4 * r), "r": 0.95 * r, "t": "GRAU", "col": Color(1.0, 0.8, 0.2)},
 		"brake_front": {"c": Vector2(s.x - 4.0 * r, s.y - 1.2 * r), "r": 0.8 * r, "t": "F.DIANT", "col": Color(1.0, 0.4, 0.35)},
 		"brake_rear": {"c": Vector2(s.x - 3.6 * r, s.y - 3.0 * r), "r": 0.8 * r, "t": "F.TRAS", "col": Color(1.0, 0.55, 0.3)},
+		"balance": {"c": Vector2(s.x - 5.4 * r, s.y - 2.6 * r), "r": 0.75 * r, "t": "EQUIL", "col": Color(0.4, 0.9, 1.0)},
+		"drift": {"c": Vector2(s.x - 6.6 * r, s.y - 0.9 * r), "r": 0.7 * r, "t": "DERRAP", "col": Color(0.9, 0.9, 0.5)},
+		"view": {"c": Vector2(s.x - 4.4 * r, 0.8 * r), "r": 0.5 * r, "t": "VISÃO", "col": Color(0.6, 1.0, 0.8)},
 		"pause": {"c": Vector2(s.x - 0.8 * r, 0.8 * r), "r": 0.5 * r, "t": "PAUSA", "col": Color.WHITE},
 		"camera_reset": {"c": Vector2(s.x - 2.0 * r, 0.8 * r), "r": 0.5 * r, "t": "CÂM", "col": Color(0.5, 0.8, 1.0)},
 		"respawn": {"c": Vector2(s.x - 3.2 * r, 0.8 * r), "r": 0.5 * r, "t": "VOLTAR", "col": Color(0.8, 0.6, 1.0)},
@@ -78,6 +84,8 @@ func _on_press(idx: int, pos: Vector2) -> void:
 					camera_reset_pressed.emit()
 				"respawn":
 					respawn_pressed.emit()
+				"view":
+					view_toggle_pressed.emit()
 			_recompute()
 			return
 	var s := get_viewport_rect().size
@@ -135,6 +143,8 @@ func _recompute() -> void:
 	brake_front = v.has("brake_front")
 	brake_rear = v.has("brake_rear")
 	wheelie = v.has("wheelie")
+	balance = v.has("balance")
+	drift = v.has("drift")
 	_throttle_held = v.has("throttle")
 	if not v.has("stick"):
 		steer = 0.0

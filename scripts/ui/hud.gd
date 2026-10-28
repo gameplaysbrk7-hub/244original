@@ -49,6 +49,9 @@ func update_hud(bike: Node) -> void:
 	if bike.pitch > 0.1:
 		_wheelie.text = "GRAU %.1fs  +%d" % [bike.wheelie_time, int(bike.wheelie_score)]
 		_wheelie.visible = true
+	elif bike.stoppie > 0.1:
+		_wheelie.text = "STOPPIE %.1fs  +%d" % [bike.stoppie_time, int(bike.stoppie_score)]
+		_wheelie.visible = true
 	else:
 		_wheelie.visible = false
 	_meter.visible = bike.pitch > 0.02
@@ -63,6 +66,10 @@ func show_message(text: String) -> void:
 
 func show_wheelie_result(duration: float, score: int) -> void:
 	show_message("GRAU! %.1fs  +%d pontos" % [duration, score])
+
+
+func show_stoppie_result(duration: float, score: int) -> void:
+	show_message("STOPPIE! %.1fs  +%d pontos" % [duration, score])
 
 
 func set_paused(value: bool) -> void:

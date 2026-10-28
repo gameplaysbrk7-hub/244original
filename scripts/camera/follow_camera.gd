@@ -13,6 +13,8 @@ var distance: float = DEFAULT_DISTANCE
 var pitch_deg: float = DEFAULT_PITCH
 var yaw_offset: float = 0.0
 var orbit_sensitivity: float = 0.35  # graus por pixel
+var first_person: bool = false
+var view_pitch: float = 0.0  # inclinação da moto (grau/stoppie), usada na 1ª pessoa
 
 var _yaw: float = 0.0
 var _focus: Vector3 = Vector3.ZERO
@@ -24,6 +26,7 @@ func _ready() -> void:
 	camera = Camera3D.new()
 	camera.fov = 70.0
 	camera.far = 300.0
+	camera.near = 0.05
 	add_child(camera)
 	camera.current = true
 
@@ -42,6 +45,11 @@ func zoom(pixels: float) -> void:
 	distance = clampf(distance + pixels * 0.01, MIN_DISTANCE, MAX_DISTANCE)
 
 
+func toggle_view() -> void:
+	first_person = not first_person
+	_first = true
+
+
 func reset_view() -> void:
 	yaw_offset = 0.0
 	pitch_deg = DEFAULT_PITCH
@@ -50,6 +58,9 @@ func reset_view() -> void:
 
 func _physics_process(delta: float) -> void:
 	if target == null or camera == null:
+		return
+	if first_person:
+		_update_first_person()
 		return
 	var target_yaw := target.global_rotation.y
 	var focus_goal := target.global_position + Vector3(0.0, 1.1, 0.0)
@@ -83,3 +94,13 @@ func _physics_process(delta: float) -> void:
 	camera.global_position = _cam_pos
 	if not _cam_pos.is_equal_approx(_focus):
 		camera.look_at(_focus, Vector3.UP)
+
+
+func _update_first_person() -> void:
+	var yaw := target.global_rotation.y
+	var head_local := Basis(Vector3.RIGHT, view_pitch) * Vector3(0.0, 1.68, -0.72)
+	var head := target.global_position + Basis(Vector3.UP, yaw) * head_local
+	var look_yaw := clampf(yaw_offset, -1.6, 1.6)
+	var look_pitch := deg_to_rad(clampf((pitch_deg - DEFAULT_PITCH) * 0.5, -20.0, 30.0))
+	var b := Basis(Vector3.UP, yaw + look_yaw) * Basis(Vector3.RIGHT, view_pitch * 0.7 - look_pitch)
+	camera.global_transform = Transform3D(b, head)

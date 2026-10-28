@@ -4,16 +4,16 @@ Jogo 3D de motos para Android feito em **Godot 4.3** (GDScript tipado, renderiza
 inspirado na pilotagem com grau de jogos de motos brasileiros. Projeto original: sem assets de terceiros,
 tudo é gerado proceduralmente.
 
-> **Estado: Fase 1 (fundação).** Ainda **não foi testado em aparelho real nem compilado pelo autor deste
+> **Estado: Fase 2 (pilotagem) sobre a base da Fase 1.** Ainda **não foi testado em aparelho real nem compilado pelo autor deste
 > código**: o primeiro build no GitHub Actions é o teste de verdade. Se algo falhar, abra o log da
 > execução (artefato `build-logs`) e corrija a partir dele.
 
 ## O que já existe
 - Pista de testes 3D com colisões (chão, muros, prédios, cones, rampa)
 - Moto procedural com piloto, rodas que giram, garfo que esterça e inclinação em curva
-- Física arcade-híbrida: aceleração, resistência, freio dianteiro/traseiro, direção, **grau com equilíbrio**, queda e reposicionamento
-- Câmera em 3ª pessoa: segue suavemente, órbita 360° por gesto, zoom por pinça, anti-atravessar paredes, reset, persistência
-- Controles de toque com multitoque (direção, ACEL, GRAU, freios, CÂM, VOLTAR, PAUSA)
+- Física arcade-híbrida: aceleração, resistência, freio dianteiro/traseiro, direção, **grau com equilíbrio** (botão EQUIL estabiliza, com pontuação menor), **stoppie** (freio dianteiro forte em velocidade; muito rápido derruba), **borrachão** (DERRAP parado + ACEL), **derrapagem lateral** (DERRAP em curva), queda por batida ou por frear forte inclinado em alta velocidade, e reposicionamento
+- Câmera em 3ª pessoa (botão VISÃO alterna para 1ª pessoa): segue suavemente, órbita 360° por gesto, zoom por pinça, anti-atravessar paredes, reset, persistência
+- Controles de toque com multitoque (direção, ACEL, GRAU, EQUIL, DERRAP, freios, VISÃO, CÂM, VOLTAR, PAUSA)
 - HUD (velocidade, pontos de grau, indicador de equilíbrio)
 - Salvamento das configurações de câmera (`user://settings.cfg`), tolerante a arquivo corrompido
 - Testes automatizados e workflow de build
@@ -34,7 +34,7 @@ gera `motorcycle-game-release.apk`. Nunca coloque keystore ou senha no repositó
 
 ## Rodar no computador
 Abra a pasta no Godot 4.3 e aperte F5. Teclado: W/↑ acelera, A/D ou ←/→ direção, Espaço grau,
-Shift freio dianteiro, S/↓ freio traseiro, R reposiciona, C reseta câmera. Com mouse, os botões
+Shift freio dianteiro, S/↓ freio traseiro, B equilíbrio, X derrapar, V troca 1ª/3ª pessoa, R reposiciona, C reseta câmera. Com mouse, os botões
 virtuais também respondem a clique.
 
 ## Testes
@@ -43,7 +43,7 @@ godot --headless --path . --import
 godot --headless --path . -s res://tests/run_tests.gd
 ```
 Cobrem: arquivos e cenas principais, referências `res://` quebradas, inicialização da moto, acelerador,
-freio, grau, equilíbrio, reposicionamento, câmera, salvamento/carregamento (inclusive arquivo corrompido)
+freio, grau, equilíbrio assistido, stoppie, borrachão, derrapagem, reposicionamento, câmera (3ª e 1ª pessoa), salvamento/carregamento (inclusive arquivo corrompido)
 e instanciação da cena principal. A exportação do APK é validada no workflow (existência, tamanho e manifesto).
 O que depende de aparelho real está em `docs/CHECKLIST_MANUAL.md`.
 
@@ -56,7 +56,7 @@ O que depende de aparelho real está em `docs/CHECKLIST_MANUAL.md`.
 - Para mudar o pacote Android: `package/unique_name` em `export_presets.cfg`.
 
 ## Próximas fases
-2 Pilotagem (stoppie, derrapagem, quedas melhores, 1ª pessoa) · 3 Cidade e trânsito · 4 Garagem, missões,
+3 Cidade e trânsito · 4 Garagem, missões,
 dinheiro e salvamento completo · 5 Áudio, otimização e acabamento.
 
 Licença: MIT (veja `LICENSE`).

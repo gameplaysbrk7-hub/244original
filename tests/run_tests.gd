@@ -87,9 +87,10 @@ func _test_references() -> void:
 func _test_settings() -> void:
 	var s := SettingsStore.new()
 	s.camera_distance = 6.5
+	s.camera_first_person = true
 	check("configurações: salvar", s.save_settings())
 	var s2 := SettingsStore.new()
-	check("configurações: carregar", s2.load_settings() and is_equal_approx(s2.camera_distance, 6.5))
+	check("configurações: carregar", s2.load_settings() and is_equal_approx(s2.camera_distance, 6.5) and s2.camera_first_person)
 	var f := FileAccess.open(SettingsStore.PATH, FileAccess.WRITE)
 	f.store_string("isto nao e um arquivo [[ valido ===")
 	f.close()
@@ -145,6 +146,57 @@ func _test_vehicle() -> void:
 	bike.respawn()
 	check("reposicionamento zera a velocidade", bike.speed == 0.0 and not bike.fallen)
 
+	# Equilíbrio assistido: segura o grau perto do ponto ideal
+	bike.input_throttle = 1.0
+	await _frames(200)
+	bike.input_throttle = 0.6
+	bike.input_wheelie = true
+	bike.input_balance = true
+	await _frames(120)
+	check("botão de equilíbrio mantém o grau sem cair", bike.pitch > 0.15 and bike.pitch < 0.9 and not bike.fallen)
+	bike.input_wheelie = false
+	bike.input_balance = false
+	bike.input_throttle = 0.0
+	await _frames(240)
+
+	# Stoppie: freio dianteiro forte em velocidade levanta a traseira
+	bike.respawn()
+	bike.input_throttle = 1.0
+	await _frames(200)
+	bike.input_throttle = 0.0
+	bike.input_brake_front = 1.0
+	var max_stoppie := 0.0
+	for i in 90:
+		await physics_frame
+		max_stoppie = maxf(max_stoppie, bike.stoppie)
+	check("stoppie levanta a traseira", max_stoppie > 0.05 and not bike.fallen)
+	bike.input_brake_front = 0.0
+	await _frames(120)
+	check("stoppie volta ao chão", bike.stoppie < 0.02)
+
+	# Borrachão: acelera com o botão de derrapar parado
+	bike.respawn()
+	var yaw0 := bike.rotation.y
+	bike.input_throttle = 1.0
+	bike.input_drift = true
+	bike.input_steer = 1.0
+	await _frames(60)
+	check("borrachão mantém a moto quase parada e girando", bike.burnout and bike.speed < 4.0 and absf(angle_difference(yaw0, bike.rotation.y)) > 0.3)
+
+	# Derrapagem lateral em velocidade
+	bike.respawn()
+	bike.input_drift = false
+	bike.input_steer = 0.0
+	bike.input_throttle = 1.0
+	await _frames(150)
+	bike.input_drift = true
+	bike.input_steer = 1.0
+	await _frames(40)
+	check("derrapagem: corpo gira diferente da trajetória", absf(angle_difference(bike.move_yaw, bike.rotation.y)) > 0.05 and not bike.fallen)
+	bike.input_drift = false
+	bike.input_steer = 0.0
+	bike.input_throttle = 0.0
+
 	bike.queue_free()
 	floor_body.queue_free()
 	await _frames(2)
@@ -163,6 +215,10 @@ func _test_camera_and_main() -> void:
 	check("câmera orbita por gesto", absf(rig.yaw_offset) > 0.1)
 	rig.reset_view()
 	check("câmera volta à posição padrão", is_zero_approx(rig.yaw_offset))
+	rig.toggle_view()
+	await _frames(5)
+	check("câmera em primeira pessoa fica junto da moto", rig.first_person and rig.camera.global_position.distance_to(dummy.global_position) < 2.5)
+	rig.toggle_view()
 	rig.queue_free()
 	dummy.queue_free()
 	await _frames(2)
