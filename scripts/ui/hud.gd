@@ -1,13 +1,15 @@
 extends CanvasLayer
-## HUD: velocidade, grau (tempo/pontos), indicador de equilíbrio e mensagens.
+## HUD: velocidade, saldo, objetivo da missão, grau/stoppie, equilíbrio, minimapa e mensagens.
 
 const BalanceMeter := preload("res://scripts/ui/balance_meter.gd")
 const Minimap := preload("res://scripts/ui/minimap.gd")
+const GameState := preload("res://scripts/save/game_state.gd")
 
 var _speed: Label
+var _money: Label
+var _objective: Label
 var _wheelie: Label
 var _msg: Label
-var _paused: Label
 var _meter: Control
 var _minimap: Control
 var _msg_time: float = 0.0
@@ -17,17 +19,21 @@ func _ready() -> void:
 	layer = 5
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_speed = _label(54, false)
-	_speed.position = Vector2(24, 10)
-	_wheelie = _label(40, false)
-	_wheelie.position = Vector2(24, 76)
+	_speed.position = Vector2(24, 8)
+	_money = _label(36, false)
+	_money.position = Vector2(24, 66)
+	_money.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	_objective = _label(28, false)
+	_objective.position = Vector2(24, 110)
+	_objective.custom_minimum_size = Vector2(430, 0)
+	_objective.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_objective.add_theme_color_override("font_color", Color(0.6, 1.0, 0.8))
+	_wheelie = _label(38, false)
+	_wheelie.position = Vector2(24, 190)
 	_msg = _label(54, true)
 	_msg.offset_top = 215.0
-	_paused = _label(64, true)
-	_paused.text = "PAUSADO\nToque em PAUSA para continuar"
-	_paused.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_paused.visible = false
 	_meter = BalanceMeter.new()
-	_meter.position = Vector2(24, 140)
+	_meter.position = Vector2(24, 245)
 	_meter.visible = false
 	add_child(_meter)
 
@@ -46,6 +52,24 @@ func _label(font_size: int, full: bool) -> Label:
 	return l
 
 
+func setup_minimap(bike: Node3D, info: Dictionary, traffic: Node, missions: Node) -> void:
+	_minimap = Minimap.new()
+	_minimap.bike = bike
+	_minimap.info = info
+	_minimap.traffic = traffic
+	_minimap.missions = missions
+	add_child(_minimap)
+
+
+func set_money(amount: int) -> void:
+	_money.text = GameState.format_money(amount)
+
+
+func set_objective(text: String) -> void:
+	_objective.text = text
+	_objective.visible = text != ""
+
+
 func update_hud(bike: Node) -> void:
 	_speed.text = "%d km/h" % int(bike.speed * 3.6)
 	if bike.pitch > 0.1:
@@ -61,17 +85,9 @@ func update_hud(bike: Node) -> void:
 	_meter.queue_redraw()
 
 
-func setup_minimap(bike: Node3D, info: Dictionary, traffic: Node) -> void:
-	_minimap = Minimap.new()
-	_minimap.bike = bike
-	_minimap.info = info
-	_minimap.traffic = traffic
-	add_child(_minimap)
-
-
 func show_message(text: String) -> void:
 	_msg.text = text
-	_msg_time = 2.2
+	_msg_time = 3.0
 
 
 func show_wheelie_result(duration: float, score: int) -> void:
@@ -80,10 +96,6 @@ func show_wheelie_result(duration: float, score: int) -> void:
 
 func show_stoppie_result(duration: float, score: int) -> void:
 	show_message("STOPPIE! %.1fs  +%d pontos" % [duration, score])
-
-
-func set_paused(value: bool) -> void:
-	_paused.visible = value
 
 
 func _process(delta: float) -> void:

@@ -5,6 +5,7 @@ const ZOOM_M := 130.0   # metros mostrados na largura do minimapa
 
 var bike: Node3D
 var traffic: Node
+var missions: Node
 var info: Dictionary = {}
 
 
@@ -43,6 +44,12 @@ func _draw() -> void:
 		for car in traffic.cars:
 			draw_circle(_w2m(car.position), 2.5, Color(0.85, 0.85, 0.85))
 
+	if missions != null and missions.has_objective_pos():
+		var mp := _w2m(missions.objective_pos())
+		var q := Vector2(clampf(mp.x, 10.0, size.x - 10.0), clampf(mp.y, 10.0, size.y - 10.0))
+		var diamond := PackedVector2Array([q + Vector2(0, -10), q + Vector2(10, 0), q + Vector2(0, 10), q + Vector2(-10, 0)])
+		draw_colored_polygon(diamond, Color(1.0, 0.85, 0.1))
+		draw_polyline(PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3], diamond[0]]), Color.BLACK, 2.0)
 	var yaw := bike.global_rotation.y
 	var f := Vector2(-sin(yaw), -cos(yaw))
 	var perp := Vector2(-f.y, f.x)

@@ -13,9 +13,11 @@ signal stoppie_finished(duration: float, score: int)
 
 const GRAVITY := 24.0
 const STOPPIE_MAX := 0.55
-const FRONT_AXLE_Z := -1.3
 
 var profile: VehicleProfile
+var custom: Dictionary = {}
+var parts: Dictionary = {}
+var front_axle_z: float = -1.3
 
 # Entradas (preenchidas por quem controla a moto)
 var input_throttle: float = 0.0
@@ -52,38 +54,23 @@ var _fork: Node3D
 var _front_wheel: Node3D
 var _rear_wheel: Node3D
 var _smoke: CPUParticles3D
+var _cs: CollisionShape3D
+var _steer_mult: float = 1.0
+var _lean_mult: float = 1.0
 
 
 func _ready() -> void:
 	if profile == null:
 		profile = load("res://resources/vehicles/starter.tres")
+	if custom.is_empty():
+		custom = BikeModel.default_custom(profile)
 	collision_layer = 2
 	collision_mask = 1 | 4 | 8
 	floor_snap_length = 0.3
 
-	var cs := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(0.5, 1.0, 1.9)
-	cs.shape = shape
-	cs.position = Vector3(0, 0.5, -0.6)
-	add_child(cs)
-
-	# Hierarquia visual: pivô do stoppie (eixo dianteiro) -> pivô do grau (eixo traseiro) -> inclinação
-	_stoppie_pivot = Node3D.new()
-	_stoppie_pivot.position = Vector3(0, 0, FRONT_AXLE_Z)
-	add_child(_stoppie_pivot)
-	var offset := Node3D.new()
-	offset.position = Vector3(0, 0, -FRONT_AXLE_Z)
-	_stoppie_pivot.add_child(offset)
-	_pitch_pivot = Node3D.new()
-	offset.add_child(_pitch_pivot)
-	_lean_pivot = Node3D.new()
-	_pitch_pivot.add_child(_lean_pivot)
-	var parts: Dictionary = BikeModel.build(profile.body_color)
-	_lean_pivot.add_child(parts["root"])
-	_fork = parts["fork"]
-	_front_wheel = parts["front_wheel"]
-	_rear_wheel = parts["rear_wheel"]
+	_cs = CollisionShape3D.new()
+	_cs.shape = BoxShape3D.new()
+	add_child(_cs)
 
 	_smoke = CPUParticles3D.new()
 	_smoke.position = Vector3(0, 0.08, 0.1)
@@ -111,8 +98,56 @@ func _ready() -> void:
 	_smoke.mesh = puff
 	add_child(_smoke)
 
+	_build_visuals()
 	_spawn_transform = global_transform
 	move_yaw = rotation.y
+
+
+## Troca o perfil (e a customização) da moto, reconstruindo o visual e a colisão.
+func set_profile(p: VehicleProfile, c: Dictionary) -> void:
+	profile = p
+	custom = c
+	if is_inside_tree():
+		_build_visuals()
+
+
+func apply_customization(c: Dictionary) -> void:
+	custom = c
+	if not parts.is_empty():
+		BikeModel.apply_custom(parts, custom)
+	_apply_suspension()
+
+
+func _build_visuals() -> void:
+	if _stoppie_pivot != null:
+		_stoppie_pivot.queue_free()
+	front_axle_z = -profile.wheelbase
+	_stoppie_pivot = Node3D.new()
+	_stoppie_pivot.position = Vector3(0, 0, front_axle_z)
+	add_child(_stoppie_pivot)
+	var offset := Node3D.new()
+	offset.position = Vector3(0, 0, -front_axle_z)
+	_stoppie_pivot.add_child(offset)
+	_pitch_pivot = Node3D.new()
+	offset.add_child(_pitch_pivot)
+	_lean_pivot = Node3D.new()
+	_pitch_pivot.add_child(_lean_pivot)
+	parts = BikeModel.build(profile, custom)
+	_lean_pivot.add_child(parts["root"])
+	_fork = parts["fork"]
+	_front_wheel = parts["front_wheel"]
+	_rear_wheel = parts["rear_wheel"]
+	BikeModel.apply_custom(parts, custom)
+	_apply_suspension()
+	var shape := _cs.shape as BoxShape3D
+	shape.size = Vector3(0.5, 1.0, profile.wheelbase + 0.6)
+	_cs.position = Vector3(0, 0.5, -profile.wheelbase * 0.5 + 0.05)
+
+
+func _apply_suspension() -> void:
+	var level := clampi(int(custom.get("suspension", 1)), 0, 2)
+	_steer_mult = [0.96, 1.0, 1.06][level]
+	_lean_mult = [1.15, 1.0, 0.9][level]
 
 
 func respawn() -> void:
@@ -218,15 +253,15 @@ func _physics_process(delta: float) -> void:
 	# --- Direção
 	var rate: float
 	if burnout:
-		rate = profile.steer_rate * 1.2 * clampf(input_steer, -1.0, 1.0)
+		rate = profile.steer_rate * _steer_mult * 1.2 * clampf(input_steer, -1.0, 1.0)
 	else:
 		var speed_factor := clampf(speed / 6.0, 0.0, 1.0)
-		rate = profile.steer_rate * clampf(input_steer, -1.0, 1.0) * speed_factor / (1.0 + speed * profile.steer_falloff)
+		rate = profile.steer_rate * _steer_mult * clampf(input_steer, -1.0, 1.0) * speed_factor / (1.0 + speed * profile.steer_falloff)
 		if drifting:
 			rate *= 1.6
 	rate *= 1.0 - 0.5 * clampf(pitch, 0.0, 1.0)
 	rotate_y(-rate * delta)
-	var lean_target := -clampf(input_steer, -1.0, 1.0) * profile.max_lean * clampf(speed / 12.0, 0.0, 1.0)
+	var lean_target := -clampf(input_steer, -1.0, 1.0) * profile.max_lean * _lean_mult * clampf(speed / 12.0, 0.0, 1.0)
 	lean = lerpf(lean, lean_target, 1.0 - exp(-6.0 * delta))
 
 	# Direção real do deslocamento: acompanha o corpo rápido (aderência) ou devagar (derrapagem)
@@ -302,7 +337,7 @@ func _update_visuals(delta: float) -> void:
 	_pitch_pivot.rotation.x = pitch
 	_stoppie_pivot.rotation.x = -stoppie
 	_lean_pivot.rotation.z = lean
-	var spin := speed / 0.33 * delta
+	var spin := speed / profile.wheel_radius * delta
 	_front_wheel.rotation.x -= spin
 	_rear_wheel.rotation.x -= spin + (30.0 * delta if burnout else 0.0)
 	var steer_visual := -clampf(input_steer, -1.0, 1.0) * 0.35

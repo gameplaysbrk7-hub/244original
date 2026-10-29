@@ -14,15 +14,19 @@ var pitch_deg: float = DEFAULT_PITCH
 var yaw_offset: float = 0.0
 var orbit_sensitivity: float = 0.35  # graus por pixel
 var first_person: bool = false
+var showroom: bool = false
+var showroom_distance: float = 3.6
 var view_pitch: float = 0.0  # inclinação da moto (grau/stoppie), usada na 1ª pessoa
 
 var _yaw: float = 0.0
 var _focus: Vector3 = Vector3.ZERO
 var _cam_pos: Vector3 = Vector3.ZERO
 var _first: bool = true
+var _show_yaw: float = 0.6
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	camera = Camera3D.new()
 	camera.fov = 70.0
 	camera.far = 300.0
@@ -58,6 +62,9 @@ func reset_view() -> void:
 
 func _physics_process(delta: float) -> void:
 	if target == null or camera == null:
+		return
+	if showroom:
+		_update_showroom(delta)
 		return
 	if first_person:
 		_update_first_person()
@@ -104,3 +111,14 @@ func _update_first_person() -> void:
 	var look_pitch := deg_to_rad(clampf((pitch_deg - DEFAULT_PITCH) * 0.5, -20.0, 30.0))
 	var b := Basis(Vector3.UP, yaw + look_yaw) * Basis(Vector3.RIGHT, view_pitch * 0.7 - look_pitch)
 	camera.global_transform = Transform3D(b, head)
+
+
+func _update_showroom(delta: float) -> void:
+	_show_yaw += delta * 0.45
+	var focus: Vector3 = target.global_transform * Vector3(0.0, 0.7, -0.65)
+	var total_yaw := target.global_rotation.y + _show_yaw + yaw_offset
+	var p := deg_to_rad(12.0)
+	var offset := Vector3(sin(total_yaw) * cos(p), sin(p), cos(total_yaw) * cos(p)) * showroom_distance
+	camera.global_position = focus + offset
+	camera.look_at(focus, Vector3.UP)
+	_first = true

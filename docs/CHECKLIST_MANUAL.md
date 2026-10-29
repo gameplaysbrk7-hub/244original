@@ -39,6 +39,21 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Minimapa mostra ruas, marcadores (G, O, P, T, 1-4), carros e a seta da moto na direção certa
 - [ ] FPS com trânsito (anotar valor): ______
 
+## Menus, garagem, missões e salvamento
+- [ ] Tela inicial aparece; JOGAR, GARAGEM e CONFIGURAÇÕES respondem ao toque
+- [ ] Sliders de configuração funcionam e são lembrados ao reabrir o jogo
+- [ ] Garagem: arrastar gira a moto; trocar de moto mostra o modelo certo
+- [ ] Comprar moto sem dinheiro é recusado; com dinheiro desconta o saldo
+- [ ] Pintura de carenagem, quadro e rodas muda a moto de verdade
+- [ ] Rodas esportivas, baú, escape esportivo, adesivos e retrovisores aparecem na moto
+- [ ] Suspensão macia/firme muda a sensação de direção
+- [ ] Pausa → Missões: iniciar entrega mostra marcador amarelo e objetivo na tela
+- [ ] Entrega concluída paga uma vez; falhar por tempo não paga
+- [ ] Desafio de grau e percurso com checkpoints funcionam
+- [ ] Pausa → Garagem longe do marcador G mostra aviso; perto abre a garagem
+- [ ] Fechar e reabrir o jogo mantém dinheiro, moto escolhida, peças e cores
+- [ ] Moto tem aparência detalhada (conferir de perto na garagem)
+
 ## Interface
 - [ ] Multitoque: direção + ACEL + GRAU ao mesmo tempo
 - [ ] Botões grandes o bastante e sem bloquear a visão da moto
@@ -56,4 +71,4 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Aparelho não esquenta de forma excessiva em 10 minutos
 
 ## Ainda não implementado nesta fase
-Áudio, garagem (tela e personalização), missões, dinheiro, ciclo dia/noite, opção de reposicionar controles, menu de configurações.
+Áudio, ciclo dia/noite, opção de reposicionar controles e volume.

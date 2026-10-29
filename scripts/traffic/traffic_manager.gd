@@ -27,12 +27,17 @@ var _neighbors: Array = []
 var _rng := RandomNumberGenerator.new()
 var _lamps: Array = []
 var _lamp_state: Array = [-1, -1]
-var _body_mesh: BoxMesh
-var _cabin_mesh: BoxMesh
-var _wheel_mesh: CylinderMesh
 var _car_mats: Array = []
 var _glass_mat: StandardMaterial3D
 var _tire_mat: StandardMaterial3D
+var _dark_mat: StandardMaterial3D
+var _head_mat: StandardMaterial3D
+var _tail_mat: StandardMaterial3D
+var _chrome_mat: StandardMaterial3D
+var _plate_mat: StandardMaterial3D
+var _box_cache: Dictionary = {}
+var _wheel_mesh: CylinderMesh
+var _hub_mesh: CylinderMesh
 
 
 func setup(roads: Array, player_node: Node3D, car_count: int) -> void:
@@ -59,6 +64,15 @@ func setup(roads: Array, player_node: Node3D, car_count: int) -> void:
 	_build_signals()
 	_apply_lights()
 	for k in density:
+		_spawn_car()
+
+
+func set_density(count: int) -> void:
+	density = clampi(count, 0, MAX_CARS)
+	while cars.size() > density:
+		var last = cars.pop_back()
+		last.queue_free()
+	while cars.size() < density and not nodes.is_empty():
 		_spawn_car()
 
 
@@ -168,7 +182,7 @@ func _spawn_car() -> void:
 	cs.shape = shape
 	cs.position = Vector3(0, 0.65, 0)
 	car.add_child(cs)
-	_add_visual(car, cars.size() % CAR_COLORS.size())
+	_add_visual(car, cars.size())
 	_place_car(car)
 	add_child(car)
 	cars.append(car)
@@ -205,34 +219,84 @@ func _free_spot(car: TrafficCar, p: Vector3) -> bool:
 # ------------------------------------------------------------ visual/semáforos
 
 func _build_assets() -> void:
-	_body_mesh = BoxMesh.new()
-	_body_mesh.size = Vector3(1.8, 0.7, 4.2)
-	_cabin_mesh = BoxMesh.new()
-	_cabin_mesh.size = Vector3(1.6, 0.6, 2.0)
 	_wheel_mesh = CylinderMesh.new()
 	_wheel_mesh.top_radius = 0.32
 	_wheel_mesh.bottom_radius = 0.32
 	_wheel_mesh.height = 0.25
-	_wheel_mesh.radial_segments = 12
+	_wheel_mesh.radial_segments = 14
+	_hub_mesh = CylinderMesh.new()
+	_hub_mesh.top_radius = 0.17
+	_hub_mesh.bottom_radius = 0.17
+	_hub_mesh.height = 0.27
+	_hub_mesh.radial_segments = 10
 	for c in CAR_COLORS:
 		var m := StandardMaterial3D.new()
 		m.albedo_color = c
-		m.roughness = 0.5
-		m.metallic = 0.3
+		m.roughness = 0.35
+		m.metallic = 0.35
 		_car_mats.append(m)
-	_glass_mat = StandardMaterial3D.new()
-	_glass_mat.albedo_color = Color(0.1, 0.15, 0.25)
-	_tire_mat = StandardMaterial3D.new()
-	_tire_mat.albedo_color = Color(0.04, 0.04, 0.04)
+	_glass_mat = _plain(Color(0.1, 0.16, 0.24), 0.1)
+	_tire_mat = _plain(Color(0.04, 0.04, 0.04), 0.95)
+	_dark_mat = _plain(Color(0.08, 0.08, 0.09), 0.8)
+	_chrome_mat = _plain(Color(0.75, 0.75, 0.8), 0.25)
+	_chrome_mat.metallic = 0.9
+	_plate_mat = _plain(Color(0.95, 0.95, 0.95), 0.6)
+	_head_mat = _plain(Color(1.0, 0.97, 0.85), 0.3)
+	_head_mat.emission_enabled = true
+	_head_mat.emission = Color(1.0, 0.97, 0.85)
+	_tail_mat = _plain(Color(0.9, 0.05, 0.05), 0.4)
+	_tail_mat.emission_enabled = true
+	_tail_mat.emission = Color(0.9, 0.05, 0.05)
 
 
-func _add_visual(car: Node3D, color_idx: int) -> void:
-	_mesh(car, _body_mesh, Vector3(0, 0.55, 0), _car_mats[color_idx])
-	_mesh(car, _cabin_mesh, Vector3(0, 1.2, 0.3), _glass_mat)
+func _plain(color: Color, rough: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.roughness = rough
+	return m
+
+
+func _part(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
+	var key := str(size)
+	if not _box_cache.has(key):
+		var b := BoxMesh.new()
+		b.size = size
+		_box_cache[key] = b
+	return _mesh(parent, _box_cache[key], pos, mat)
+
+
+func _add_visual(car: Node3D, idx: int) -> void:
+	var body_mat: StandardMaterial3D = _car_mats[idx % _car_mats.size()]
+	var style := (idx / 2) % 3   # 0 sedã, 1 hatch, 2 van
+	_part(car, Vector3(1.8, 0.55, 4.2), Vector3(0, 0.55, 0), body_mat)
+	match style:
+		0:
+			_part(car, Vector3(1.64, 0.4, 1.9), Vector3(0, 1.07, 0.25), _glass_mat)
+			_part(car, Vector3(1.6, 0.07, 2.0), Vector3(0, 1.3, 0.25), body_mat)
+			_part(car, Vector3(1.78, 0.08, 0.9), Vector3(0, 0.84, -1.45), body_mat)
+		1:
+			_part(car, Vector3(1.64, 0.42, 2.3), Vector3(0, 1.08, 0.55), _glass_mat)
+			_part(car, Vector3(1.6, 0.07, 2.4), Vector3(0, 1.32, 0.55), body_mat)
+			_part(car, Vector3(1.78, 0.08, 0.8), Vector3(0, 0.84, -1.5), body_mat)
+		_:
+			_part(car, Vector3(1.8, 1.15, 2.9), Vector3(0, 1.2, 0.6), body_mat)
+			_part(car, Vector3(1.7, 0.45, 0.05), Vector3(0, 1.45, -0.87), _glass_mat)
+			_part(car, Vector3(1.82, 0.3, 1.2), Vector3(0, 1.5, 0.0), _glass_mat)
+	_part(car, Vector3(1.86, 0.2, 0.15), Vector3(0, 0.32, -2.12), _dark_mat)
+	_part(car, Vector3(1.86, 0.2, 0.15), Vector3(0, 0.32, 2.12), _dark_mat)
+	for sx in [-0.62, 0.62]:
+		_part(car, Vector3(0.38, 0.13, 0.05), Vector3(sx, 0.66, -2.11), _head_mat)
+		_part(car, Vector3(0.3, 0.1, 0.05), Vector3(sx * 1.05, 0.68, 2.11), _tail_mat)
+		_part(car, Vector3(0.12, 0.1, 0.07), Vector3(sx * 1.6, 1.0, -0.7), body_mat)
+	_part(car, Vector3(0.4, 0.12, 0.02), Vector3(0, 0.4, -2.2), _plate_mat)
+	_part(car, Vector3(0.4, 0.12, 0.02), Vector3(0, 0.55, 2.2), _plate_mat)
+	_part(car, Vector3(1.2, 0.05, 0.03), Vector3(0, 0.62, -2.12), _chrome_mat)
 	for sx in [-0.9, 0.9]:
-		for sz in [-1.4, 1.4]:
+		for sz in [-1.35, 1.35]:
 			var w := _mesh(car, _wheel_mesh, Vector3(sx, 0.32, sz), _tire_mat)
 			w.rotation = Vector3(0, 0, PI / 2.0)
+			var hub := _mesh(car, _hub_mesh, Vector3(sx, 0.32, sz), _chrome_mat)
+			hub.rotation = Vector3(0, 0, PI / 2.0)
 
 
 func _mesh(parent: Node3D, mesh: Mesh, pos: Vector3, mat: Material) -> MeshInstance3D:

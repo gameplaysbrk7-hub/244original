@@ -8,6 +8,10 @@ const FollowCamera := preload("res://scripts/camera/follow_camera.gd")
 const SettingsStore := preload("res://scripts/save/settings_store.gd")
 const CityBuilder := preload("res://scripts/city/city_builder.gd")
 const TrafficManager := preload("res://scripts/traffic/traffic_manager.gd")
+const GameState := preload("res://scripts/save/game_state.gd")
+const BikeCatalog := preload("res://scripts/vehicle/bike_catalog.gd")
+const BikeModel := preload("res://scripts/vehicle/bike_model.gd")
+const MissionManager := preload("res://scripts/missions/mission_manager.gd")
 
 var failures: int = 0
 var checks: int = 0
@@ -36,8 +40,11 @@ func _run_all() -> void:
 	_test_files()
 	_test_references()
 	_test_settings()
+	_test_models()
+	_test_progression()
 	await _test_vehicle()
 	await _test_city_and_traffic()
+	await _test_missions()
 	await _test_camera_and_main()
 	print("== %d verificações, %d falhas ==" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -55,6 +62,12 @@ func _test_files() -> void:
 		"res://scripts/city/city_builder.gd",
 		"res://scripts/traffic/traffic_manager.gd",
 		"res://scripts/ui/minimap.gd",
+		"res://scripts/ui/menu_ui.gd",
+		"res://scripts/ui/garage_ui.gd",
+		"res://scripts/save/game_state.gd",
+		"res://scripts/missions/mission_manager.gd",
+		"res://resources/vehicles/corisco.tres",
+		"res://resources/vehicles/trovao.tres",
 	]:
 		check("arquivo existe: " + p, FileAccess.file_exists(p))
 	check("cena principal carrega", load("res://scenes/main/main.tscn") is PackedScene)
@@ -203,6 +216,16 @@ func _test_vehicle() -> void:
 	bike.input_steer = 0.0
 	bike.input_throttle = 0.0
 
+	var corisco := BikeCatalog.load_profile("corisco")
+	bike.set_profile(corisco, BikeModel.default_custom(corisco))
+	await _frames(30)
+	check("troca de moto: entre-eixos e colisão atualizados", is_equal_approx(bike.front_axle_z, -1.35) and bike.is_on_floor())
+	var cust := BikeModel.default_custom(corisco)
+	cust["body_color"] = Color(0.2, 0.9, 0.3)
+	cust["suspension"] = 2
+	bike.apply_customization(cust)
+	check("personalização aplicada na moto em jogo", (bike.parts["mats"]["body"] as StandardMaterial3D).albedo_color.is_equal_approx(Color(0.2, 0.9, 0.3)))
+
 	bike.queue_free()
 	floor_body.queue_free()
 	await _frames(2)
@@ -233,7 +256,17 @@ func _test_camera_and_main() -> void:
 	var m := packed.instantiate()
 	root.add_child(m)
 	await _frames(10)
-	check("cena principal instancia moto, câmera, interface e trânsito", m.get_node_or_null("Motorcycle") != null and m.get_node_or_null("FollowCamera") != null and m.touch != null and m.get_node_or_null("Traffic") != null)
+	check("cena principal instancia moto, câmera, interface, trânsito, missões e menus", m.get_node_or_null("Motorcycle") != null and m.get_node_or_null("FollowCamera") != null and m.touch != null and m.get_node_or_null("Traffic") != null and m.get_node_or_null("Missions") != null and m.menu != null and m.state != null)
+	check("jogo começa na tela inicial", m.mode == 0 and m.menu.visible)
+	m.menu.open("missions")
+	m.menu.open("settings")
+	m.garage.open()
+	await _frames(3)
+	check("garagem abre com a moto em vitrine", m.garage.visible and m.cam.showroom)
+	m.garage.close()
+	m._start_playing()
+	await _frames(5)
+	check("jogar libera a simulação", m.mode == 1 and not m.get_tree().paused)
 	m.queue_free()
 	await _frames(2)
 
@@ -280,3 +313,155 @@ func _test_city_and_traffic() -> void:
 	check("semáforos alternam entre os eixos", ew_early == 0 and ns_early == 2 and mgr.light_state(0) == 2 and mgr.light_state(1) == 0)
 	holder.queue_free()
 	await _frames(2)
+
+
+func _count_nodes(n: Node) -> int:
+	var c := 1
+	for ch in n.get_children():
+		c += _count_nodes(ch)
+	return c
+
+
+func _remove_save(path: String) -> void:
+	for suffix in ["", ".bak", ".tmp"]:
+		var p: String = path + suffix
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+
+
+func _test_models() -> void:
+	for id in BikeCatalog.ids():
+		var prof := BikeCatalog.load_profile(id)
+		check("moto %s: perfil carrega" % id, prof != null and prof.max_speed > 0.0)
+		var custom := BikeModel.default_custom(prof)
+		var parts := BikeModel.build(prof, custom)
+		var n := _count_nodes(parts["root"])
+		check("moto %s: modelo detalhado (%d peças)" % [id, n], n > 80)
+		custom["body_color"] = Color(0.1, 0.8, 0.2)
+		custom["sticker"] = "listras"
+		BikeModel.apply_custom(parts, custom)
+		var mat: StandardMaterial3D = parts["mats"]["body"]
+		check("moto %s: pintura altera o material real" % id, mat.albedo_color.is_equal_approx(Color(0.1, 0.8, 0.2)) and parts["sticker_stripes"].visible and not parts["sticker_number"].visible)
+		parts["root"].free()
+
+
+func _test_progression() -> void:
+	var path := "user://test_save.json"
+	_remove_save(path)
+	var st := GameState.new()
+	st.save_path = path
+	var loaded := st.load_game()
+	check("progressão: sem arquivo começa com padrão válido", (not loaded) and st.money == 500 and st.selected_bike == "starter" and st.unlocked_bikes == ["starter"])
+
+	st.add_money(1000)
+	st.set_custom_value("starter", "body_color", Color(0.1, 0.2, 0.3))
+	st.set_custom_value("starter", "suspension", 2)
+	check("progressão: salvar", st.save_game())
+	var st2 := GameState.new()
+	st2.save_path = path
+	var base := BikeModel.default_custom(BikeCatalog.load_profile("starter"))
+	var c2 := st2.get_custom("starter", base)
+	check("progressão: carregar dinheiro e personalização", st2.load_game() and st2.money == 1500 and absf(st2.get_custom("starter", base)["body_color"].r - 0.1) < 0.01 and int(st2.get_custom("starter", base)["suspension"]) == 2)
+
+	st.add_money(500)
+	st.save_game()
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string("{ arquivo corrompido")
+	f.close()
+	var st3 := GameState.new()
+	st3.save_path = path
+	check("progressão: arquivo corrompido volta ao backup", st3.load_game() and st3.money == 1500)
+	var fb := FileAccess.open(path + ".bak", FileAccess.WRITE)
+	fb.store_string("lixo")
+	fb.close()
+	var st4 := GameState.new()
+	st4.save_path = path
+	check("progressão: sem backup válido usa o padrão sem travar", (not st4.load_game()) and st4.money == 500)
+
+	var shop := GameState.new()
+	shop.save_path = "user://test_save_shop.json"
+	shop.money = 1000
+	check("loja: moto cara sem saldo é recusada", (not shop.buy_bike("corisco", 5500)) and shop.money == 1000 and not shop.unlocked_bikes.has("corisco"))
+	shop.money = 6000
+	check("loja: compra desconta e desbloqueia", shop.buy_bike("corisco", 5500) and shop.money == 500 and shop.unlocked_bikes.has("corisco"))
+	check("loja: não compra duas vezes", not shop.buy_bike("corisco", 5500) and shop.money == 500)
+	shop.money = 700
+	check("loja: item personalizado", shop.buy_item("bau", 600) and shop.owned_items.has("bau") and shop.money == 100)
+
+	var rw := GameState.new()
+	rw.save_path = "user://test_save_rw.json"
+	rw.money = 0
+	var paid := rw.claim_reward("m1", "m1#1", 300)
+	var again := rw.claim_reward("m1", "m1#1", 300)
+	var repeat := rw.claim_reward("m1", "m1#2", 300)
+	check("recompensa: paga uma vez por execução e 40% nas repetições", paid == 300 and again == 0 and repeat == 120 and rw.money == 420)
+
+	for x in [st, st2, st3, st4, shop, rw]:
+		x.free()
+	for pth in [path, "user://test_save_shop.json", "user://test_save_rw.json"]:
+		_remove_save(pth)
+
+
+func _test_missions() -> void:
+	var save_path := "user://test_save_missions.json"
+	_remove_save(save_path)
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var bike := Motorcycle.new()
+	bike.position = Vector3(0, 0.3, 0)
+	holder.add_child(bike)
+	var st := GameState.new()
+	st.save_path = save_path
+	holder.add_child(st)
+	st.money = 0
+	var pois := [
+		{"id": "garagem", "name": "GARAGEM", "pos": Vector3(18, 0, 30)},
+		{"id": "oficina", "name": "OFICINA", "pos": Vector3(-12, 0, 36)},
+	]
+	var mm := MissionManager.new()
+	holder.add_child(mm)
+	mm.setup(st, bike, pois)
+
+	check("missão: inicia entrega", mm.start("entrega_oficina") and mm.is_active())
+	check("missão: não inicia duas ao mesmo tempo", not mm.start("grau_5"))
+	bike.global_position = Vector3(18, 0.3, 30)
+	mm._physics_process(0.01)
+	check("missão: coleta a encomenda", mm.stage == 1)
+	bike.global_position = Vector3(-12, 0.3, 36)
+	mm._physics_process(0.01)
+	check("missão: entrega paga a recompensa", (not mm.is_active()) and st.money == 250)
+	mm._physics_process(0.01)
+	check("missão: sem pagamento duplicado", st.money == 250)
+	mm.start("entrega_oficina")
+	bike.global_position = Vector3(18, 0.3, 30)
+	mm._physics_process(0.01)
+	bike.global_position = Vector3(-12, 0.3, 36)
+	mm._physics_process(0.01)
+	check("missão: repetição paga 40%", st.money == 350 and int(st.completed["entrega_oficina"]) == 2)
+
+	var fails := {"n": 0}
+	mm.failed.connect(func(_m, _r): fails["n"] += 1)
+	mm.start("entrega_sul")
+	for i in 130:
+		mm._physics_process(1.0)
+	check("missão: falha por tempo sem pagar", fails["n"] == 1 and (not mm.is_active()) and st.money == 350)
+
+	mm.start("grau_5")
+	bike.wheelie_time = 5.5
+	mm._physics_process(0.01)
+	check("missão: desafio de grau", (not mm.is_active()) and st.money == 700)
+
+	mm.start("percurso_centro")
+	var pts: Array = mm.active["points"].duplicate()
+	for p in pts:
+		bike.global_position = p + Vector3(0, 0.3, 0)
+		mm._physics_process(0.01)
+	check("missão: percurso com checkpoints em ordem", (not mm.is_active()) and st.money == 1300)
+
+	mm.start("grau_10")
+	mm.cancel()
+	check("missão: cancelar não paga", (not mm.is_active()) and st.money == 1300)
+
+	holder.queue_free()
+	await _frames(2)
+	_remove_save(save_path)

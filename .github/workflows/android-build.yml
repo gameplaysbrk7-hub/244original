@@ -92,7 +92,13 @@ jobs:
           exit $status
 
       - name: Testes automatizados
-        run: godot --headless --path . -s res://tests/run_tests.gd 2>&1 | tee build/logs/tests.log
+        run: |
+          godot --headless --path . -s res://tests/run_tests.gd 2>&1 | tee build/logs/tests.log
+          if grep -qE "SCRIPT ERROR|Parse Error" build/logs/tests.log; then
+            echo "::error::Erros de script durante os testes (veja build-logs/tests.log)"
+            grep -E "SCRIPT ERROR|Parse Error" build/logs/tests.log | head -n 20
+            exit 1
+          fi
 
       - name: Exportar APK de debug
         run: |
