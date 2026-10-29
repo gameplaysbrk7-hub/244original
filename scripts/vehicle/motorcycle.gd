@@ -58,7 +58,7 @@ func _ready() -> void:
 	if profile == null:
 		profile = load("res://resources/vehicles/starter.tres")
 	collision_layer = 2
-	collision_mask = 1
+	collision_mask = 1 | 4 | 8
 	floor_snap_length = 0.3
 
 	var cs := CollisionShape3D.new()
@@ -243,9 +243,12 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	for i in get_slide_collision_count():
-		var n := get_slide_collision(i).get_normal()
+		var col := get_slide_collision(i)
+		var n := col.get_normal()
 		if n.y < 0.5:
-			var into := -fwd.dot(n) * speed
+			var rel := fwd * speed - col.get_collider_velocity()
+			rel.y = 0.0
+			var into := -rel.dot(n)
 			if into > 0.0:
 				speed = maxf(0.0, speed - into * 1.1)
 				if into > profile.crash_speed_loss * 0.6:

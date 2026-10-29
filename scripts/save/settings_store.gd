@@ -10,6 +10,7 @@ var camera_yaw_offset: float = 0.0
 var camera_first_person: bool = false
 var steer_sensitivity: float = 1.0
 var control_opacity: float = 0.55
+var traffic_density: int = 10
 
 
 func _ready() -> void:
@@ -27,6 +28,7 @@ func load_settings() -> bool:
 	camera_first_person = fp if typeof(fp) == TYPE_BOOL else false
 	steer_sensitivity = clampf(_num(cfg, "controls", "steer_sensitivity", steer_sensitivity), 0.4, 2.0)
 	control_opacity = clampf(_num(cfg, "controls", "opacity", control_opacity), 0.15, 1.0)
+	traffic_density = clampi(int(_num(cfg, "game", "traffic_density", float(traffic_density))), 0, 30)
 	return true
 
 
@@ -38,6 +40,7 @@ func save_settings() -> bool:
 	cfg.set_value("camera", "first_person", camera_first_person)
 	cfg.set_value("controls", "steer_sensitivity", steer_sensitivity)
 	cfg.set_value("controls", "opacity", control_opacity)
+	cfg.set_value("game", "traffic_density", traffic_density)
 	return cfg.save(PATH) == OK
 
 

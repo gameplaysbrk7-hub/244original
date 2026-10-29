@@ -2,12 +2,14 @@ extends CanvasLayer
 ## HUD: velocidade, grau (tempo/pontos), indicador de equilíbrio e mensagens.
 
 const BalanceMeter := preload("res://scripts/ui/balance_meter.gd")
+const Minimap := preload("res://scripts/ui/minimap.gd")
 
 var _speed: Label
 var _wheelie: Label
 var _msg: Label
 var _paused: Label
 var _meter: Control
+var _minimap: Control
 var _msg_time: float = 0.0
 
 
@@ -19,7 +21,7 @@ func _ready() -> void:
 	_wheelie = _label(40, false)
 	_wheelie.position = Vector2(24, 76)
 	_msg = _label(54, true)
-	_msg.offset_top = 90.0
+	_msg.offset_top = 215.0
 	_paused = _label(64, true)
 	_paused.text = "PAUSADO\nToque em PAUSA para continuar"
 	_paused.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -59,6 +61,14 @@ func update_hud(bike: Node) -> void:
 	_meter.queue_redraw()
 
 
+func setup_minimap(bike: Node3D, info: Dictionary, traffic: Node) -> void:
+	_minimap = Minimap.new()
+	_minimap.bike = bike
+	_minimap.info = info
+	_minimap.traffic = traffic
+	add_child(_minimap)
+
+
 func show_message(text: String) -> void:
 	_msg.text = text
 	_msg_time = 2.2
@@ -77,6 +87,9 @@ func set_paused(value: bool) -> void:
 
 
 func _process(delta: float) -> void:
+	if _minimap != null:
+		_minimap.position = Vector2(get_viewport().get_visible_rect().size.x * 0.5 - 95.0, 10.0)
+		_minimap.queue_redraw()
 	if _msg_time > 0.0:
 		_msg_time -= delta
 		if _msg_time <= 0.0:

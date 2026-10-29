@@ -28,6 +28,17 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Câmera não atravessa prédios nem muros
 - [ ] Fechar e reabrir o jogo mantém distância e altura da câmera
 
+## Cidade e trânsito
+- [ ] Moto começa na avenida central; dá para chegar à garagem, oficina, posto e área de treino
+- [ ] Prédios, postes e muros de limite têm colisão; a moto não atravessa nada
+- [ ] Câmera não pula ao passar perto de postes
+- [ ] Carros circulam pela mão direita e param nos semáforos vermelhos
+- [ ] Carros freiam quando a moto está à frente e não atravessam a moto
+- [ ] Bater de leve no carro não derruba; bater forte derruba
+- [ ] Nenhum carro fica preso para sempre (se ficar, ele reaparece em até ~15 s)
+- [ ] Minimapa mostra ruas, marcadores (G, O, P, T, 1-4), carros e a seta da moto na direção certa
+- [ ] FPS com trânsito (anotar valor): ______
+
 ## Interface
 - [ ] Multitoque: direção + ACEL + GRAU ao mesmo tempo
 - [ ] Botões grandes o bastante e sem bloquear a visão da moto
@@ -45,4 +56,4 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Aparelho não esquenta de forma excessiva em 10 minutos
 
 ## Ainda não implementado nesta fase
-Áudio, garagem, missões, dinheiro, trânsito, minimapa, ciclo dia/noite, opção de reposicionar controles.
+Áudio, garagem (tela e personalização), missões, dinheiro, ciclo dia/noite, opção de reposicionar controles, menu de configurações.

@@ -6,6 +6,8 @@ extends SceneTree
 const Motorcycle := preload("res://scripts/vehicle/motorcycle.gd")
 const FollowCamera := preload("res://scripts/camera/follow_camera.gd")
 const SettingsStore := preload("res://scripts/save/settings_store.gd")
+const CityBuilder := preload("res://scripts/city/city_builder.gd")
+const TrafficManager := preload("res://scripts/traffic/traffic_manager.gd")
 
 var failures: int = 0
 var checks: int = 0
@@ -35,6 +37,7 @@ func _run_all() -> void:
 	_test_references()
 	_test_settings()
 	await _test_vehicle()
+	await _test_city_and_traffic()
 	await _test_camera_and_main()
 	print("== %d verificações, %d falhas ==" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -49,6 +52,9 @@ func _test_files() -> void:
 		"res://scripts/vehicle/motorcycle.gd",
 		"res://scripts/camera/follow_camera.gd",
 		"res://scripts/ui/touch_controls.gd",
+		"res://scripts/city/city_builder.gd",
+		"res://scripts/traffic/traffic_manager.gd",
+		"res://scripts/ui/minimap.gd",
 	]:
 		check("arquivo existe: " + p, FileAccess.file_exists(p))
 	check("cena principal carrega", load("res://scenes/main/main.tscn") is PackedScene)
@@ -227,6 +233,50 @@ func _test_camera_and_main() -> void:
 	var m := packed.instantiate()
 	root.add_child(m)
 	await _frames(10)
-	check("cena principal instancia moto, câmera e interface", m.get_node_or_null("Motorcycle") != null and m.get_node_or_null("FollowCamera") != null and m.touch != null)
+	check("cena principal instancia moto, câmera, interface e trânsito", m.get_node_or_null("Motorcycle") != null and m.get_node_or_null("FollowCamera") != null and m.touch != null and m.get_node_or_null("Traffic") != null)
 	m.queue_free()
+	await _frames(2)
+
+
+func _test_city_and_traffic() -> void:
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var info: Dictionary = CityBuilder.build(holder)
+	check("cidade: 3 ruas em cada direção e pontos de interesse", info["roads"].size() == 3 and info["pois"].size() >= 8)
+	var ids: Array = []
+	for p in info["pois"]:
+		ids.append(p["id"])
+	check("cidade: garagem, oficina, posto e treino existem", ids.has("garagem") and ids.has("oficina") and ids.has("posto") and ids.has("treino"))
+	check("cidade: chão com colisão", holder.get_node_or_null("Ground") != null)
+	var spawn: Vector3 = info["spawn"]
+	check("cidade: ponto de partida dentro do mapa", absf(spawn.x) < 100.0 and absf(spawn.z) < 100.0)
+
+	var player := Node3D.new()
+	player.position = spawn
+	holder.add_child(player)
+	var mgr := TrafficManager.new()
+	holder.add_child(mgr)
+	mgr.setup(info["roads"], player, 8)
+	check("trânsito: carros criados", mgr.cars.size() == 8)
+	var start: Array = []
+	for c in mgr.cars:
+		start.append(c.position)
+	await _frames(120)
+	var moved := 0
+	for i in mgr.cars.size():
+		if mgr.cars[i].position.distance_to(start[i]) > 1.0:
+			moved += 1
+	check("trânsito: carros se movem", moved >= 3)
+	await _frames(900)
+	var inside := true
+	for c in mgr.cars:
+		if absf(c.position.x) > 105.0 or absf(c.position.z) > 105.0 or absf(c.position.y) > 0.5:
+			inside = false
+	check("trânsito: carros permanecem no mapa", inside)
+	mgr.time = 2.0
+	var ew_early := mgr.light_state(0)
+	var ns_early := mgr.light_state(1)
+	mgr.time = 12.0
+	check("semáforos alternam entre os eixos", ew_early == 0 and ns_early == 2 and mgr.light_state(0) == 2 and mgr.light_state(1) == 0)
+	holder.queue_free()
 	await _frames(2)

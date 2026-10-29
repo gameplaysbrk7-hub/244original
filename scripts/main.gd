@@ -5,13 +5,16 @@ const Motorcycle := preload("res://scripts/vehicle/motorcycle.gd")
 const FollowCamera := preload("res://scripts/camera/follow_camera.gd")
 const TouchControls := preload("res://scripts/ui/touch_controls.gd")
 const Hud := preload("res://scripts/ui/hud.gd")
-const TestTrack := preload("res://scripts/city/test_track.gd")
+const CityBuilder := preload("res://scripts/city/city_builder.gd")
+const TrafficManager := preload("res://scripts/traffic/traffic_manager.gd")
 const SettingsStore := preload("res://scripts/save/settings_store.gd")
 
 var bike: Motorcycle
 var cam: FollowCamera
 var touch: TouchControls
 var hud: Hud
+var traffic: TrafficManager
+var city_info: Dictionary = {}
 var settings  # autoload GameSettings (ou instância local se não existir)
 
 
@@ -22,11 +25,11 @@ func _ready() -> void:
 		settings.name = "LocalSettings"
 		add_child(settings)
 
-	TestTrack.build(self)
+	city_info = CityBuilder.build(self)
 
 	bike = Motorcycle.new()
 	bike.name = "Motorcycle"
-	bike.position = Vector3(0, 0.05, 40)
+	bike.position = city_info["spawn"]
 	add_child(bike)
 
 	cam = FollowCamera.new()
@@ -49,6 +52,12 @@ func _ready() -> void:
 	ui.add_child(touch)
 	hud = Hud.new()
 	add_child(hud)
+
+	traffic = TrafficManager.new()
+	traffic.name = "Traffic"
+	add_child(traffic)
+	traffic.setup(city_info["roads"], bike, settings.traffic_density)
+	hud.setup_minimap(bike, city_info, traffic)
 
 	touch.camera_drag.connect(cam.orbit)
 	touch.camera_zoom.connect(cam.zoom)
@@ -84,8 +93,9 @@ func _process(_delta: float) -> void:
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		match event.keycode:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo:
+		match key.keycode:
 			KEY_R:
 				bike.respawn()
 			KEY_C:
