@@ -118,6 +118,7 @@ func _ready() -> void:
 	bike.stoppie_finished.connect(hud.show_stoppie_result)
 	bike.crashed.connect(hud.show_message.bind("QUEDA!"))
 	state.money_changed.connect(hud.set_money)
+	missions.carrying_changed.connect(bike.set_carrying)
 	missions.started.connect(_on_mission_started)
 	missions.completed.connect(_on_mission_completed)
 	missions.failed.connect(_on_mission_failed)

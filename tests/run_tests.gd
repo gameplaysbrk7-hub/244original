@@ -12,6 +12,7 @@ const GameState := preload("res://scripts/save/game_state.gd")
 const BikeCatalog := preload("res://scripts/vehicle/bike_catalog.gd")
 const BikeModel := preload("res://scripts/vehicle/bike_model.gd")
 const MissionManager := preload("res://scripts/missions/mission_manager.gd")
+const TouchControls := preload("res://scripts/ui/touch_controls.gd")
 
 var failures: int = 0
 var checks: int = 0
@@ -45,6 +46,7 @@ func _run_all() -> void:
 	await _test_vehicle()
 	await _test_city_and_traffic()
 	await _test_missions()
+	await _test_touch_wheelie()
 	await _test_camera_and_main()
 	print("== %d verificações, %d falhas ==" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -219,7 +221,7 @@ func _test_vehicle() -> void:
 	var corisco := BikeCatalog.load_profile("corisco")
 	bike.set_profile(corisco, BikeModel.default_custom(corisco))
 	await _frames(30)
-	check("troca de moto: entre-eixos e colisão atualizados", is_equal_approx(bike.front_axle_z, -1.35) and bike.is_on_floor())
+	check("troca de moto: entre-eixos e colisão atualizados", is_equal_approx(bike.front_axle_z, -1.28) and bike.is_on_floor())
 	var cust := BikeModel.default_custom(corisco)
 	cust["body_color"] = Color(0.2, 0.9, 0.3)
 	cust["suspension"] = 2
@@ -275,11 +277,17 @@ func _test_city_and_traffic() -> void:
 	var holder := Node3D.new()
 	root.add_child(holder)
 	var info: Dictionary = CityBuilder.build(holder)
-	check("cidade: 3 ruas em cada direção e pontos de interesse", info["roads"].size() == 3 and info["pois"].size() >= 8)
+	check("cidade: 3 ruas em cada direção e pontos de interesse", info["roads"].size() == 3 and info["pois"].size() >= 15)
 	var ids: Array = []
 	for p in info["pois"]:
 		ids.append(p["id"])
 	check("cidade: garagem, oficina, posto e treino existem", ids.has("garagem") and ids.has("oficina") and ids.has("posto") and ids.has("treino"))
+	var deliveries_ok := true
+	for k in ["hamburgueria_1", "hamburgueria_2", "hamburgueria_3"]:
+		deliveries_ok = deliveries_ok and ids.has(k)
+	for k in 8:
+		deliveries_ok = deliveries_ok and ids.has("casa_%d" % (k + 1))
+	check("cidade: 3 hamburguerias e 8 casas de entrega", deliveries_ok)
 	check("cidade: chão com colisão", holder.get_node_or_null("Ground") != null)
 	var spawn: Vector3 = info["spawn"]
 	check("cidade: ponto de partida dentro do mapa", absf(spawn.x) < 100.0 and absf(spawn.z) < 100.0)
@@ -415,53 +423,72 @@ func _test_missions() -> void:
 	holder.add_child(st)
 	st.money = 0
 	var pois := [
-		{"id": "garagem", "name": "GARAGEM", "pos": Vector3(18, 0, 30)},
-		{"id": "oficina", "name": "OFICINA", "pos": Vector3(-12, 0, 36)},
+		{"id": "hamburgueria_1", "name": "HAMBURGUERIA 1", "pos": Vector3(18, 0, 30)},
+		{"id": "casa_1", "name": "CASA 1", "pos": Vector3(-12, 0, 36)},
 	]
 	var mm := MissionManager.new()
 	holder.add_child(mm)
 	mm.setup(st, bike, pois)
 
-	check("missão: inicia entrega", mm.start("entrega_oficina") and mm.is_active())
+	check("missão: inicia entrega", mm.start("entrega_1") and mm.is_active())
 	check("missão: não inicia duas ao mesmo tempo", not mm.start("grau_5"))
 	bike.global_position = Vector3(18, 0.3, 30)
 	mm._physics_process(0.01)
-	check("missão: coleta a encomenda", mm.stage == 1)
+	check("missão: coleta o pedido na hamburgueria e passa a carregar", mm.stage == 1)
 	bike.global_position = Vector3(-12, 0.3, 36)
 	mm._physics_process(0.01)
-	check("missão: entrega paga a recompensa", (not mm.is_active()) and st.money == 250)
+	check("missão: entrega na casa paga a recompensa", (not mm.is_active()) and st.money == 300)
 	mm._physics_process(0.01)
-	check("missão: sem pagamento duplicado", st.money == 250)
-	mm.start("entrega_oficina")
+	check("missão: sem pagamento duplicado", st.money == 300)
+	mm.start("entrega_1")
 	bike.global_position = Vector3(18, 0.3, 30)
 	mm._physics_process(0.01)
 	bike.global_position = Vector3(-12, 0.3, 36)
 	mm._physics_process(0.01)
-	check("missão: repetição paga 40%", st.money == 350 and int(st.completed["entrega_oficina"]) == 2)
+	check("missão: repetição paga 40%", st.money == 420 and int(st.completed["entrega_1"]) == 2)
 
 	var fails := {"n": 0}
 	mm.failed.connect(func(_m, _r): fails["n"] += 1)
-	mm.start("entrega_sul")
-	for i in 130:
+	mm.start("entrega_4")
+	for i in 200:
 		mm._physics_process(1.0)
-	check("missão: falha por tempo sem pagar", fails["n"] == 1 and (not mm.is_active()) and st.money == 350)
+	check("missão: falha por tempo sem pagar", fails["n"] == 1 and (not mm.is_active()) and st.money == 420)
 
 	mm.start("grau_5")
 	bike.wheelie_time = 5.5
 	mm._physics_process(0.01)
-	check("missão: desafio de grau", (not mm.is_active()) and st.money == 700)
+	check("missão: desafio de grau", (not mm.is_active()) and st.money == 770)
 
 	mm.start("percurso_centro")
 	var pts: Array = mm.active["points"].duplicate()
 	for p in pts:
 		bike.global_position = p + Vector3(0, 0.3, 0)
 		mm._physics_process(0.01)
-	check("missão: percurso com checkpoints em ordem", (not mm.is_active()) and st.money == 1300)
+	check("missão: percurso com checkpoints em ordem", (not mm.is_active()) and st.money == 1370)
 
 	mm.start("grau_10")
 	mm.cancel()
-	check("missão: cancelar não paga", (not mm.is_active()) and st.money == 1300)
+	check("missão: cancelar não paga", (not mm.is_active()) and st.money == 1370)
 
 	holder.queue_free()
 	await _frames(2)
 	_remove_save(save_path)
+
+
+func _test_touch_wheelie() -> void:
+	var touch := TouchControls.new()
+	root.add_child(touch)
+	await _frames(2)
+	check("controles: não existe mais botão GRAU", not touch._layout().has("wheelie"))
+	touch._on_press(0, Vector2(150, 500))
+	touch._on_drag(0, Vector2(150, 500), Vector2.ZERO)
+	check("controles: analógico parado não liga o grau", not touch.wheelie)
+	touch._on_drag(0, Vector2(150, 700), Vector2(0, 200))
+	check("controles: puxar o analógico para trás liga o grau", touch.wheelie)
+	touch._on_drag(0, Vector2(150, 500), Vector2(0, -200))
+	check("controles: empurrar de volta desliga o grau", not touch.wheelie)
+	touch._on_drag(0, Vector2(150, 700), Vector2(0, 200))
+	touch._on_release(0)
+	check("controles: soltar o analógico desliga o grau e zera a direção", (not touch.wheelie) and is_zero_approx(touch.steer))
+	touch.queue_free()
+	await _frames(2)

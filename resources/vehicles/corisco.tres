@@ -5,16 +5,15 @@
 [resource]
 script = ExtResource("1")
 id = "corisco"
-display_name = "Corisco 160"
+display_name = "GC 160"
 style = 1
-wheelbase = 1.35
-wheel_radius = 0.32
+wheelbase = 1.28
+wheel_radius = 0.31
 price = 5500
-max_speed = 44.0
-accel = 11.0
-brake_front = 27.0
-brake_rear = 15.0
-steer_rate = 2.6
-max_lean = 0.75
-wheelie_lift = 8.2
-body_color = Color(0.1, 0.35, 0.85, 1)
+max_speed = 38.0
+accel = 9.6
+brake_front = 25.0
+brake_rear = 14.0
+steer_rate = 2.5
+wheelie_lift = 7.8
+body_color = Color(0.12, 0.32, 0.7, 1)

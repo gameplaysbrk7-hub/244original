@@ -112,43 +112,72 @@ func _step_car(car: TrafficCar, delta: float) -> void:
 	var dir := span / length
 	var t := (pos - car.a).dot(dir)
 	if t >= length - 4.0:
+		# Chegou ao cruzamento: escolhe o próximo trecho e segue sem parar
 		_next_edge(car)
-		return
+		span = car.b - car.a
+		length = span.length()
+		dir = span / length
+		t = (pos - car.a).dot(dir)
 
+	# Direção: persegue um ponto à frente na faixa
 	var target: Vector3 = car.a + dir * clampf(t + LOOK, 0.0, length)
 	var to_target := target - pos
 	var desired := atan2(-to_target.x, -to_target.z)
+	var turn := absf(angle_difference(car.yaw, desired))
 	car.yaw = lerp_angle(car.yaw, desired, 1.0 - exp(-4.0 * delta))
 	var fwd := Vector3(-sin(car.yaw), 0.0, -cos(car.yaw))
+	var right := Vector3(-fwd.z, 0.0, fwd.x)
 
 	var target_speed := CRUISE
+	if turn > 0.35:
+		target_speed = 4.5   # reduz em curvas
+
 	# Semáforo do próximo cruzamento
+	var stopped_for_light := false
 	var center: Vector3 = nodes[car.to_node]
 	var dist_center := (center - pos).dot(dir)
 	var stop_zone: float = car.speed * car.speed / 12.0 + 4.0
 	var axis := 0 if absf(dir.x) > absf(dir.z) else 1
 	if dist_center > STOP_LINE and dist_center < STOP_LINE + stop_zone and light_state(axis) != 0:
 		target_speed = 0.0
-	# Obstáculo à frente (moto ou outro carro)
-	var reach := 3.0 + car.speed * 1.0
-	var origin := pos + Vector3(0, 0.6, 0) + fwd * 2.4
-	var exclude: Array[RID] = [car.get_rid()]
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + fwd * reach, 2 | 4, exclude)
-	var blocked := not get_world_3d().direct_space_state.intersect_ray(query).is_empty()
-	if blocked:
+		stopped_for_light = true
+
+	# Obstáculo à frente (moto ou outro carro), por geometria simples
+	var reach := 4.0 + car.speed * 1.2
+	if _obstacle_ahead(car, pos, fwd, right, reach):
 		target_speed = 0.0
-	if blocked and car.speed < 0.3:
-		car.blocked_time += delta
-		if car.blocked_time > 12.0:
-			_place_car(car)
-			return
-	else:
-		car.blocked_time = 0.0
 
 	var rate := 14.0 if target_speed < car.speed else 5.0
 	car.speed = move_toward(car.speed, target_speed, rate * delta)
-	car.position = pos + fwd * car.speed * delta
+	car.motion = fwd * car.speed
+	car.position = pos + car.motion * delta
 	car.rotation.y = car.yaw
+
+	# Anti-travamento: carro parado sem motivo de semáforo por muito tempo é reposicionado
+	if car.speed < 0.3 and not stopped_for_light:
+		car.blocked_time += delta
+		if car.blocked_time > 10.0:
+			_place_car(car)
+	else:
+		car.blocked_time = 0.0
+
+
+func _obstacle_ahead(car: TrafficCar, pos: Vector3, fwd: Vector3, right: Vector3, reach: float) -> bool:
+	for other in cars:
+		if other != car and _in_front(other.position, pos, fwd, right, reach):
+			return true
+	if player != null and _in_front(player.global_position, pos, fwd, right, reach):
+		return true
+	return false
+
+
+static func _in_front(other: Vector3, pos: Vector3, fwd: Vector3, right: Vector3, reach: float) -> bool:
+	var rel := other - pos
+	rel.y = 0.0
+	var ahead := rel.dot(fwd)
+	if ahead < 1.0 or ahead > reach + 2.2:
+		return false
+	return absf(rel.dot(right)) < 2.0
 
 
 func _next_edge(car: TrafficCar) -> void:
@@ -175,7 +204,7 @@ func _spawn_car() -> void:
 	var car := TrafficCar.new()
 	car.collision_layer = 4
 	car.collision_mask = 0
-	car.sync_to_physics = true
+	car.sync_to_physics = false
 	var cs := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(1.8, 1.3, 4.2)
@@ -202,7 +231,8 @@ func _place_car(car: TrafficCar) -> void:
 			car.position = p
 			car.yaw = atan2(-dir.x, -dir.z)
 			car.rotation.y = car.yaw
-			car.speed = 0.0
+			car.speed = 3.0
+			car.motion = Vector3.ZERO
 			car.blocked_time = 0.0
 			return
 

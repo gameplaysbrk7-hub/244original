@@ -5,18 +5,18 @@
 [resource]
 script = ExtResource("1")
 id = "trovao"
-display_name = "Trovão 250"
+display_name = "TORRADO 300"
 style = 2
 wheelbase = 1.45
-wheel_radius = 0.37
+wheel_radius = 0.38
 price = 9000
-max_speed = 40.0
-accel = 10.0
-brake_front = 22.0
+max_speed = 44.0
+accel = 11.0
+brake_front = 23.0
 brake_rear = 15.0
 steer_rate = 2.2
 max_lean = 0.6
 wheelie_lift = 9.0
 wheelie_max_pitch = 1.35
 crash_speed_loss = 15.0
-body_color = Color(0.95, 0.55, 0.05, 1)
+body_color = Color(0.95, 0.5, 0.05, 1)

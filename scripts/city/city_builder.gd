@@ -30,9 +30,6 @@ static func build(root: Node3D) -> Dictionary:
 	_lamps(root)
 	_trees(root, rng)
 	_blocks(root, rng, pois)
-	var deliveries := [Vector3(-60, 0, -30), Vector3(60, 0, 30), Vector3(30, 0, 60), Vector3(-30, 0, -60)]
-	for i in 4:
-		_poi(root, pois, "entrega_%d" % (i + 1), "ENTREGA %d" % (i + 1), str(i + 1), deliveries[i], Color(1.0, 0.9, 0.2))
 	return {
 		"roads": ROADS,
 		"half": HALF,
@@ -266,6 +263,8 @@ static func _trees(root: Node3D, rng: RandomNumberGenerator) -> void:
 # -------------------------------------------------------------- quarteirões
 
 static func _blocks(root: Node3D, rng: RandomNumberGenerator, pois: Array) -> void:
+	var hamb := {"0,1": "1", "3,2": "2", "1,3": "3"}   # quarteirões com hamburgueria
+	var houses := [0]                                   # contador de casas de entrega
 	for ix in 4:
 		for iz in 4:
 			var bx: Array = BLOCKS[ix]
@@ -283,12 +282,12 @@ static func _blocks(root: Node3D, rng: RandomNumberGenerator, pois: Array) -> vo
 			elif ix == 2 and iz == 2:
 				_garage_block(root, pois)
 			elif (ix == 0 or ix == 3) and (iz == 0 or iz == 3):
-				_residential_block(root, rng, x0, x1, z0, z1)
+				_residential_block(root, rng, x0, x1, z0, z1, pois, houses)
 			else:
-				_commercial_block(root, rng, x0, x1, z0, z1)
+				_commercial_block(root, rng, x0, x1, z0, z1, pois, str(hamb.get("%d,%d" % [ix, iz], "")))
 
 
-static func _commercial_block(root: Node3D, rng: RandomNumberGenerator, x0: float, x1: float, z0: float, z1: float) -> void:
+static func _commercial_block(root: Node3D, rng: RandomNumberGenerator, x0: float, x1: float, z0: float, z1: float, pois: Array, hamb_id: String) -> void:
 	var nx := maxi(1, int((x1 - x0) / 24.0))
 	var nz := maxi(1, int((z1 - z0) / 24.0))
 	var lot_w := (x1 - x0) / nx
@@ -300,17 +299,37 @@ static func _commercial_block(root: Node3D, rng: RandomNumberGenerator, x0: floa
 			var w := lot_w - rng.randf_range(5.0, 8.0)
 			var d := lot_d - rng.randf_range(5.0, 8.0)
 			var h := rng.randf_range(7.0, 21.0)
-			_building(root, Vector3(cx, h * 0.5, cz), Vector3(w, h, d), rng.randi() % PALETTE.size(), rng, rng.randf() < 0.7)
+			var shop := rng.randf() < 0.7
+			var color_idx := rng.randi() % PALETTE.size()
+			var is_hamb := hamb_id != "" and i == 0 and j == 0
+			if is_hamb:
+				h = 8.0
+				color_idx = 4
+				shop = false
+			var pos := Vector3(cx, h * 0.5, cz)
+			var size := Vector3(w, h, d)
+			_building(root, pos, size, color_idx, rng, shop)
+			if is_hamb:
+				_hamburgueria(root, pois, pos, size, hamb_id)
 
 
-static func _residential_block(root: Node3D, rng: RandomNumberGenerator, x0: float, x1: float, z0: float, z1: float) -> void:
+static func _residential_block(root: Node3D, rng: RandomNumberGenerator, x0: float, x1: float, z0: float, z1: float, pois: Array, houses: Array) -> void:
 	var nx := maxi(1, int((x1 - x0) / 17.0))
 	var nz := maxi(1, int((z1 - z0) / 17.0))
 	var lot_w := (x1 - x0) / nx
 	var lot_d := (z1 - z0) / nz
 	for i in nx:
 		for j in nz:
-			_house(root, x0 + lot_w * (i + 0.5), z0 + lot_d * (j + 0.5), lot_w, lot_d, rng)
+			var lcx := x0 + lot_w * (i + 0.5)
+			var lcz := z0 + lot_d * (j + 0.5)
+			var delivery := (i + j) % 2 == 0
+			var label := ""
+			if delivery:
+				houses[0] += 1
+				label = "CASA %d" % houses[0]
+			var gate := _house(root, lcx, lcz, lot_w, lot_d, rng, label)
+			if delivery:
+				_poi(root, pois, "casa_%d" % houses[0], label, "C", gate, Color(0.4, 1.0, 0.5))
 
 
 static func _training_area(root: Node3D, pois: Array) -> void:
@@ -453,7 +472,55 @@ static func _building(root: Node3D, pos: Vector3, size: Vector3, color_idx: int,
 		_label(root, SHOPS[rng.randi() % SHOPS.size()], Vector3(pos.x, 3.9, pos.z) + n * (half + 0.15), Color(1, 1, 1), atan2(n.x, n.z))
 
 
-static func _house(root: Node3D, cx: float, cz: float, lot_w: float, lot_d: float, rng: RandomNumberGenerator) -> void:
+## Hamburgueria: prédio baixo com vitrine, toldo, letreiro e um hambúrguer gigante no telhado.
+static func _hamburgueria(root: Node3D, pois: Array, pos: Vector3, size: Vector3, id: String) -> void:
+	var n := _facing_dir(pos.x, pos.z)
+	var along_x := absf(n.x) > 0.5
+	var half := size.x * 0.5 if along_x else size.z * 0.5
+	var width := (size.z if along_x else size.x) * 0.85
+	var base := Vector3(pos.x, 0.0, pos.z)
+	_mesh(root, _box_mesh(Vector3(0.12, 2.8, width) if along_x else Vector3(width, 2.8, 0.12)), base + n * (half + 0.06) + Vector3(0, 1.4, 0), _mat(Color(0.18, 0.22, 0.28)))
+	var red := _mat(Color(0.85, 0.1, 0.08))
+	var yellow := _mat(Color(1.0, 0.8, 0.1))
+	_mesh(root, _box_mesh(Vector3(1.6, 0.1, width) if along_x else Vector3(width, 0.1, 1.6)), base + n * (half + 0.8) + Vector3(0, 3.1, 0), red)
+	_mesh(root, _box_mesh(Vector3(0.1, 0.14, width) if along_x else Vector3(width, 0.14, 0.1)), base + n * (half + 1.58) + Vector3(0, 3.0, 0), yellow)
+	_label(root, "HAMBURGUERIA", base + n * (half + 0.15) + Vector3(0, 4.3, 0), Color(1.0, 0.85, 0.1), atan2(n.x, n.z))
+	# Hambúrguer gigante no telhado
+	var top := pos.y + size.y * 0.5
+	var c := Vector3(pos.x, top + 1.0, pos.z)
+	var bun := _mat(Color(0.88, 0.58, 0.22))
+	var bun_bottom := CylinderMesh.new()
+	bun_bottom.top_radius = 1.6
+	bun_bottom.bottom_radius = 1.5
+	bun_bottom.height = 0.5
+	bun_bottom.radial_segments = 20
+	_mesh(root, bun_bottom, c, bun)
+	var patty := CylinderMesh.new()
+	patty.top_radius = 1.7
+	patty.bottom_radius = 1.7
+	patty.height = 0.45
+	patty.radial_segments = 20
+	_mesh(root, patty, c + Vector3(0, 0.5, 0), _mat(Color(0.32, 0.16, 0.08)))
+	var cheese := _mesh(root, _box_mesh(Vector3(3.4, 0.1, 3.4)), c + Vector3(0, 0.82, 0), yellow)
+	cheese.rotation.y = PI / 4.0
+	var lettuce := CylinderMesh.new()
+	lettuce.top_radius = 1.8
+	lettuce.bottom_radius = 1.8
+	lettuce.height = 0.2
+	lettuce.radial_segments = 20
+	_mesh(root, lettuce, c + Vector3(0, 1.0, 0), _mat(Color(0.3, 0.7, 0.2)))
+	var top_bun := SphereMesh.new()
+	top_bun.radius = 1.6
+	top_bun.height = 3.2
+	top_bun.radial_segments = 20
+	top_bun.rings = 10
+	var tb := _mesh(root, top_bun, c + Vector3(0, 1.1, 0), bun)
+	tb.scale = Vector3(1.0, 0.6, 1.0)
+	var marker := base + n * (half + 4.6)
+	_poi(root, pois, "hamburgueria_" + id, "HAMBURGUERIA " + id, "H", marker, Color(1.0, 0.55, 0.1))
+
+
+static func _house(root: Node3D, cx: float, cz: float, lot_w: float, lot_d: float, rng: RandomNumberGenerator, label: String) -> Vector3:
 	var n := _facing_dir(cx, cz)
 	var along_x := absf(n.x) > 0.5
 	var w := lot_w - 6.5
@@ -469,6 +536,8 @@ static func _house(root: Node3D, cx: float, cz: float, lot_w: float, lot_d: floa
 	var front := Vector3(cx, 0.0, cz) + n * (half + 0.05)
 	_mesh(root, _box_mesh(Vector3(0.1, 2.1, 1.0) if along_x else Vector3(1.0, 2.1, 0.1)), front + Vector3(0, 1.05, 0), _mat(Color(0.35, 0.22, 0.14)))
 	var glass := _mat(Color(0.2, 0.3, 0.4))
+	var number_text := label if label != "" else str(10 + rng.randi() % 989)
+	_label(root, number_text, front + Vector3(0, 2.75, 0) + n * 0.05, Color(0.4, 1.0, 0.5) if label != "" else Color(1, 1, 1), atan2(n.x, n.z))
 	for off in [-width * 0.3, width * 0.3]:
 		var wp := front + Vector3(0, 1.7, 0) + (Vector3(0, 0, off) if along_x else Vector3(off, 0, 0))
 		_mesh(root, _box_mesh(Vector3(0.1, 1.0, 1.2) if along_x else Vector3(1.2, 1.0, 0.1)), wp, glass)
@@ -482,6 +551,7 @@ static func _house(root: Node3D, cx: float, cz: float, lot_w: float, lot_d: floa
 		var off: float = sgn * (1.6 + seg * 0.5)
 		var pos := wall_center + Vector3(0, 0.9, 0) + (Vector3(0, 0, off) if along_x else Vector3(off, 0, 0))
 		_box_body(root, pos, Vector3(0.25, 1.8, seg) if along_x else Vector3(seg, 1.8, 0.25), wall_mat)
+	return wall_center
 
 
 static func _facing_dir(cx: float, cz: float) -> Vector3:

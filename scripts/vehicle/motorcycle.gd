@@ -39,6 +39,7 @@ var move_yaw: float = 0.0       # direção real de deslocamento (difere do corp
 var burnout: bool = false
 var drifting: bool = false
 var fallen: bool = false
+var carrying: bool = false     # levando um pedido (mostra a bolsa de entrega)
 var fall_timer: float = 0.0
 var fall_side: float = 1.0
 var wheelie_time: float = 0.0
@@ -111,6 +112,12 @@ func set_profile(p: VehicleProfile, c: Dictionary) -> void:
 		_build_visuals()
 
 
+func set_carrying(on: bool) -> void:
+	carrying = on
+	if parts.has("bag"):
+		(parts["bag"] as Node3D).visible = on
+
+
 func apply_customization(c: Dictionary) -> void:
 	custom = c
 	if not parts.is_empty():
@@ -138,6 +145,7 @@ func _build_visuals() -> void:
 	_front_wheel = parts["front_wheel"]
 	_rear_wheel = parts["rear_wheel"]
 	BikeModel.apply_custom(parts, custom)
+	(parts["bag"] as Node3D).visible = carrying
 	_apply_suspension()
 	var shape := _cs.shape as BoxShape3D
 	shape.size = Vector3(0.5, 1.0, profile.wheelbase + 0.6)
@@ -281,7 +289,13 @@ func _physics_process(delta: float) -> void:
 		var col := get_slide_collision(i)
 		var n := col.get_normal()
 		if n.y < 0.5:
-			var rel := fwd * speed - col.get_collider_velocity()
+			var cv := col.get_collider_velocity()
+			var other := col.get_collider()
+			if other != null:
+				var mv: Variant = other.get("motion")
+				if typeof(mv) == TYPE_VECTOR3:
+					cv = mv
+			var rel := fwd * speed - cv
 			rel.y = 0.0
 			var into := -rel.dot(n)
 			if into > 0.0:

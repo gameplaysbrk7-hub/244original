@@ -9,8 +9,9 @@ const Catalog := preload("res://scripts/missions/mission_catalog.gd")
 signal started(mission: Dictionary)
 signal completed(mission: Dictionary, reward: int)
 signal failed(mission: Dictionary, reason: String)
+signal carrying_changed(on: bool)
 
-const DELIVERY_RADIUS := 5.5
+const DELIVERY_RADIUS := 7.0
 const CHECKPOINT_RADIUS := 7.0
 
 var state: Node
@@ -68,6 +69,7 @@ func start(id: String) -> bool:
 	_run_id = "%s#%d" % [id, _run_counter]
 	_finished = false
 	_update_marker()
+	carrying_changed.emit(false)
 	started.emit(active.duplicate(true))
 	return true
 
@@ -123,6 +125,8 @@ func _physics_process(delta: float) -> void:
 				stage += 1
 				if stage >= 2:
 					_complete()
+				else:
+					carrying_changed.emit(true)
 		"wheelie":
 			if float(bike.wheelie_time) >= float(active["target"]):
 				_complete()
@@ -140,6 +144,7 @@ func _complete() -> void:
 	var reward: int = state.claim_reward(str(m["id"]), _run_id, int(m["reward"]))
 	active = {}
 	_update_marker()
+	carrying_changed.emit(false)
 	completed.emit(m, reward)
 
 
@@ -148,6 +153,7 @@ func _fail(reason: String) -> void:
 	var m := active.duplicate(true)
 	active = {}
 	_update_marker()
+	carrying_changed.emit(false)
 	failed.emit(m, reason)
 
 

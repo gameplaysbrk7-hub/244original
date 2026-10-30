@@ -43,7 +43,6 @@ func _layout() -> Dictionary:
 	var r := _unit() * 0.12
 	return {
 		"throttle": {"c": Vector2(s.x - 1.7 * r, s.y - 1.7 * r), "r": 1.3 * r, "t": "ACEL", "col": Color(0.3, 1.0, 0.45)},
-		"wheelie": {"c": Vector2(s.x - 1.4 * r, s.y - 4.4 * r), "r": 0.95 * r, "t": "GRAU", "col": Color(1.0, 0.8, 0.2)},
 		"brake_front": {"c": Vector2(s.x - 4.0 * r, s.y - 1.2 * r), "r": 0.8 * r, "t": "F.DIANT", "col": Color(1.0, 0.4, 0.35)},
 		"brake_rear": {"c": Vector2(s.x - 3.6 * r, s.y - 3.0 * r), "r": 0.8 * r, "t": "F.TRAS", "col": Color(1.0, 0.55, 0.3)},
 		"balance": {"c": Vector2(s.x - 5.4 * r, s.y - 2.6 * r), "r": 0.75 * r, "t": "EQUIL", "col": Color(0.4, 0.9, 1.0)},
@@ -122,6 +121,12 @@ func _on_drag(idx: int, pos: Vector2, relative: Vector2) -> void:
 		_stick_pos = pos
 		var x := clampf(delta.x / radius, -1.0, 1.0)
 		steer = clampf(signf(x) * pow(absf(x), 1.4) * steer_sensitivity, -1.0, 1.0)
+		# Puxar o analógico para trás (dedo para baixo) liga o grau; com histerese
+		var pull := clampf(delta.y / radius, 0.0, 1.0)
+		if wheelie:
+			wheelie = pull > 0.35
+		else:
+			wheelie = pull > 0.55
 	elif kind == "camera":
 		var prev: Vector2 = _cam_pos.get(idx, pos)
 		if _cam_pos.size() >= 2:
@@ -142,12 +147,12 @@ func _recompute() -> void:
 	var v := _touches.values()
 	brake_front = v.has("brake_front")
 	brake_rear = v.has("brake_rear")
-	wheelie = v.has("wheelie")
 	balance = v.has("balance")
 	drift = v.has("drift")
 	_throttle_held = v.has("throttle")
 	if not v.has("stick"):
 		steer = 0.0
+		wheelie = false
 
 
 func _release_all() -> void:
@@ -196,6 +201,10 @@ func _draw() -> void:
 	draw_arc(base, sr, 0.0, TAU, 48, Color(1, 1, 1, ui_opacity * 0.8), 4.0)
 	draw_circle(base, sr, Color(1, 1, 1, ui_opacity * 0.12))
 	var knob := _stick_pos if active else base
-	draw_circle(knob, sr * 0.38, Color(1, 1, 1, ui_opacity * (0.8 if active else 0.4)))
+	var knob_col := Color(1.0, 0.8, 0.2) if wheelie else Color(1, 1, 1)
+	draw_circle(knob, sr * 0.38, Color(knob_col.r, knob_col.g, knob_col.b, ui_opacity * (0.9 if active else 0.4)))
+	if wheelie:
+		draw_string(font, knob + Vector2(-sr, -sr * 0.55), "GRAU!", HORIZONTAL_ALIGNMENT_CENTER, sr * 2.0, 30, Color(1.0, 0.85, 0.2))
 	if not active:
 		draw_string(font, base + Vector2(-sr, sr + 28.0), "DIREÇÃO", HORIZONTAL_ALIGNMENT_CENTER, sr * 2.0, 22, Color(1, 1, 1, ui_opacity))
+		draw_string(font, base + Vector2(-sr, sr + 54.0), "puxe p/ trás = GRAU", HORIZONTAL_ALIGNMENT_CENTER, sr * 2.0, 18, Color(1, 0.85, 0.3, ui_opacity))

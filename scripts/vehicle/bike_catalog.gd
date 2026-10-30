@@ -2,9 +2,9 @@ extends RefCounted
 ## Catálogo de motos e itens de personalização da loja.
 
 const BIKES := [
-	{"id": "starter", "name": "Zangão 125", "price": 0, "path": "res://resources/vehicles/starter.tres"},
-	{"id": "corisco", "name": "Corisco 160", "price": 5500, "path": "res://resources/vehicles/corisco.tres"},
-	{"id": "trovao", "name": "Trovão 250", "price": 9000, "path": "res://resources/vehicles/trovao.tres"},
+	{"id": "starter", "name": "GC 125", "price": 0, "path": "res://resources/vehicles/starter.tres"},
+	{"id": "corisco", "name": "GC 160", "price": 5500, "path": "res://resources/vehicles/corisco.tres"},
+	{"id": "trovao", "name": "TORRADO 300", "price": 9000, "path": "res://resources/vehicles/trovao.tres"},
 ]
 
 const ITEMS := [

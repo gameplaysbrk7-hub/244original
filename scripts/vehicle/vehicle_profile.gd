@@ -2,8 +2,8 @@ extends Resource
 ## Parâmetros de uma motocicleta. Cada moto futura será um .tres deste tipo.
 
 @export var id: String = "starter"
-@export var display_name: String = "Zangão 125"
-@export var style: int = 0                     # 0 street, 1 esportiva, 2 trail
+@export var display_name: String = "GC 125"
+@export var style: int = 0                     # 0 clássica (GC 125), 1 utilitária moderna (GC 160), 2 trail (TORRADO 300)
 @export var wheelbase: float = 1.3             # entre-eixos (m)
 @export var wheel_radius: float = 0.33         # raio da roda (m)
 @export var price: int = 0

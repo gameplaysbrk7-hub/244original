@@ -10,7 +10,8 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] ACEL acelera progressivamente; soltar desacelera
 - [ ] F.DIANT e F.TRAS freiam; F.DIANT é mais forte
 - [ ] Joystick à esquerda esterça de forma progressiva; a moto se inclina na curva
-- [ ] GRAU + ACEL levanta a dianteira; modular o acelerador mantém o grau
+- [ ] Puxar o analógico para trás (dedo para baixo) + ACEL levanta a dianteira e o analógico mostra "GRAU!"; soltar ou empurrar para frente desliga; modular o acelerador mantém o grau
+- [ ] Não existe mais botão GRAU na tela
 - [ ] F.TRAS baixa a dianteira durante o grau
 - [ ] Acelerar demais no grau derruba a moto para trás (QUEDA!) e ela volta sozinha
 - [ ] VOLTAR reposiciona a moto no início
@@ -29,6 +30,10 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Fechar e reabrir o jogo mantém distância e altura da câmera
 
 ## Cidade e trânsito
+- [ ] Os carros andam pelas ruas, fazem curvas nos cruzamentos e param no vermelho
+- [ ] Existem 3 hamburguerias (letreiro, toldo, hambúrguer no telhado) e casas "CASA 1..8" com marcador verde
+- [ ] Entrega: pegar o pedido na hamburgueria, a bolsa vermelha aparece na moto, entregar na casa
+- [ ] As 3 motos têm visual claramente diferente (GC 125 clássica, GC 160 moderna, TORRADO 300 trail)
 - [ ] Moto começa na avenida central; dá para chegar à garagem, oficina, posto e área de treino
 - [ ] Prédios, postes e muros de limite têm colisão; a moto não atravessa nada
 - [ ] Câmera não pula ao passar perto de postes
@@ -55,7 +60,7 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Moto tem aparência detalhada (conferir de perto na garagem)
 
 ## Interface
-- [ ] Multitoque: direção + ACEL + GRAU ao mesmo tempo
+- [ ] Multitoque: analógico (com grau) + ACEL ao mesmo tempo
 - [ ] Botões grandes o bastante e sem bloquear a visão da moto
 - [ ] PAUSA congela a moto; tocar de novo retoma
 - [ ] Velocidade, pontos do grau e indicador de equilíbrio aparecem
