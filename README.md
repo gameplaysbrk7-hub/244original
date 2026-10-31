@@ -4,11 +4,20 @@ Jogo 3D de motos para Android feito em **Godot 4.3** (GDScript tipado, renderiza
 inspirado na pilotagem com grau de jogos de motos brasileiros. Projeto original: sem assets de terceiros,
 tudo é gerado proceduralmente.
 
-> **Estado: Fase 4 (garagem, missões, dinheiro, salvamento) e gráficos melhorados, sobre as Fases 1 a 3.** Ainda **não foi testado em aparelho real nem compilado pelo autor deste
+> **Estado: versão 1.0 (Fase 5 concluída): acabamento, áudio, dia e noite, desempenho.** Ainda **não foi testado em aparelho real nem compilado pelo autor deste
 > código**: o primeiro build no GitHub Actions é o teste de verdade. Se algo falhar, abra o log da
 > execução (artefato `build-logs`) e corrija a partir dele.
 
 ## O que já existe
+
+### Fase 5 (acabamento)
+- **Áudio gerado por código** (nenhum arquivo de som externo): motor com rotação e **troca de marchas** (5 marchas), rajada de motor no borrachão, **derrapagem e frenagem**, vento proporcional à velocidade, **ambiente urbano**, **impactos**, **queda**, cliques de interface e jingles de missão (sucesso e falha). Volume geral, motor/efeitos e ambiente ajustáveis; o som pausa junto com o jogo
+- **Ciclo de dia e noite**: sol e lua, céu, névoa e luz ambiente mudam; ao anoitecer acendem **janelas e vitrines**, o **farol da moto** e 4 luzes de poste reaproveitadas junto do jogador (limite de luzes dinâmicas). Relógio no HUD; duração do dia configurável (0 = tempo parado)
+- **Qualidade gráfica** Automática/Baixa/Média/Alta: sombras, alcance de visão, resolução 3D, alcance e teto de carros. No modo automático, uma **proteção de desempenho** reduz a qualidade (nunca aumenta) se o FPS ficar abaixo de 24 por 6 segundos. Limite de 60 FPS para poupar bateria. Peças pequenas do cenário somem a 150 m
+- **Reposicionar controles**: Configurações → Controles → REPOSICIONAR CONTROLES; arraste cada botão onde quiser; as posições são salvas
+- Configurações em abas (Controles, Som, Gráficos); versão 1.0.0 no preset Android
+
+> **Metas de desempenho (30 FPS em celulares modestos, 60 FPS nos bons) NÃO foram verificadas**: não houve teste em aparelho real. Os testes automáticos cobrem a lógica da qualidade e da proteção, mas o FPS real só se mede no celular (use o checklist).
 
 ### Ajustes recentes
 - **Trânsito corrigido:** os carros agora circulam pelas ruas (mão direita, semáforos, curvas nos cruzamentos). A detecção de obstáculos passou a ser por geometria simples (sem consultas de física) e carros parados sem motivo por mais de 10 s são reposicionados
@@ -67,19 +76,18 @@ godot --headless --path . -s res://tests/run_tests.gd
 ```
 Cobrem: arquivos e cenas principais, referências `res://` quebradas, inicialização da moto, acelerador,
 freio, grau, equilíbrio assistido, stoppie, borrachão, derrapagem, reposicionamento, câmera (3ª e 1ª pessoa), salvamento/carregamento (inclusive arquivo corrompido)
-geração da cidade, pontos de interesse, modelos das 3 motos e pintura, salvamento/backup/corrupção, loja, recompensas únicas, missões (entrega, grau, checkpoints, tempo, cancelamento), troca de moto, garagem e menus, movimento e permanência dos carros no mapa, alternância dos semáforos e instanciação da cena principal. A exportação do APK é validada no workflow (existência, tamanho e manifesto).
+sons gerados, áudio (rotação, derrapagem, volume), dia/noite (sol, janelas, farol, relógio), qualidade gráfica e proteção de FPS, reposicionamento de controles, configurações finais, geração da cidade, pontos de interesse, modelos das 3 motos e pintura, salvamento/backup/corrupção, loja, recompensas únicas, missões (entrega, grau, checkpoints, tempo, cancelamento), troca de moto, garagem e menus, movimento e permanência dos carros no mapa, alternância dos semáforos e instanciação da cena principal. A exportação do APK é validada no workflow (existência, tamanho e manifesto).
 O que depende de aparelho real está em `docs/CHECKLIST_MANUAL.md`.
 
 ## Estrutura
 - `scenes/main/` cena principal; `scripts/vehicle/` moto, modelo e perfil; `scripts/camera/` câmera;
-  `scripts/ui/` controles e HUD; `scripts/city/` cidade; `scripts/traffic/` trânsito; `scripts/save/` configurações e estado do jogo; `scripts/missions/` missões; `scripts/ui/` também menus e garagem;
+  `scripts/ui/` controles e HUD; `scripts/city/` cidade e ciclo dia/noite; `scripts/traffic/` trânsito; `scripts/audio/` sons gerados por código; `scripts/core/` qualidade gráfica e proteção de desempenho; `scripts/save/` configurações e estado do jogo; `scripts/missions/` missões; `scripts/ui/` também menus e garagem;
   `resources/vehicles/` perfis de moto (`.tres`); `tests/` testes; `.github/workflows/` build.
 - Para criar outra moto: duplique `resources/vehicles/starter.tres` e ajuste os parâmetros.
 - Para trocar o nome: `config/name` em `project.godot` e `package/name` em `export_presets.cfg`.
 - Para mudar o pacote Android: `package/unique_name` em `export_presets.cfg`.
 
-## Próximas fases
-4 Garagem, missões,
-dinheiro e salvamento completo · 5 Áudio, otimização e acabamento.
+## Ideias futuras
+Mais motos e peças, mais missões, clima (chuva), sons gravados originais, mapa maior, pedestres, modo multijogador local.
 
 Licença: MIT (veja `LICENSE`).

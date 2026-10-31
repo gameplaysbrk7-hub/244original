@@ -16,18 +16,20 @@ const AWNINGS := [Color(0.8, 0.1, 0.1), Color(0.1, 0.4, 0.8), Color(0.1, 0.6, 0.
 const SHOPS := ["MERCADO", "PADARIA", "FARMÁCIA", "LANCHONETE", "LOJA", "BAR"]
 
 static var _tex_cache: Dictionary = {}
+static var _lit: Array = []   # materiais que acendem à noite (janelas, vitrines)
 
 
 static func build(root: Node3D) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20261028
 	var pois: Array = []
-	_environment(root)
+	_lit = []
+	var env_info := _environment(root)
 	_horizon(root)
 	_ground_and_roads(root)
 	_road_markings(root)
 	_walls(root)
-	_lamps(root)
+	var lamps := _lamps(root)
 	_trees(root, rng)
 	_blocks(root, rng, pois)
 	return {
@@ -36,12 +38,17 @@ static func build(root: Node3D) -> Dictionary:
 		"road_w": ROAD_W,
 		"spawn": Vector3(3, 0.05, 40),
 		"pois": pois,
+		"env": env_info["env"],
+		"sky": env_info["sky"],
+		"sun": env_info["sun"],
+		"lit_materials": _lit.duplicate(),
+		"lamps": lamps,
 	}
 
 
 # ---------------------------------------------------------------- ambiente
 
-static func _environment(root: Node3D) -> void:
+static func _environment(root: Node3D) -> Dictionary:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky_mat := ProceduralSkyMaterial.new()
@@ -70,6 +77,7 @@ static func _environment(root: Node3D) -> void:
 	sun.directional_shadow_max_distance = 70.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	root.add_child(sun)
+	return {"env": env, "sky": sky_mat, "sun": sun}
 
 
 static func _horizon(root: Node3D) -> void:
@@ -165,7 +173,7 @@ static func _walls(root: Node3D) -> void:
 	_box_body(root, Vector3(HALF + 0.5, 2, 0), Vector3(1, 4, HALF * 2 + 2), mat)
 
 
-static func _lamps(root: Node3D) -> void:
+static func _lamps(root: Node3D) -> Array:
 	var pole := CylinderMesh.new()
 	pole.top_radius = 0.07
 	pole.bottom_radius = 0.1
@@ -184,6 +192,7 @@ static func _lamps(root: Node3D) -> void:
 	var shape := CylinderShape3D.new()
 	shape.radius = 0.12
 	shape.height = 5.0
+	var out: Array = []
 	var alt := 1.0
 	for r in ROADS:
 		var rr: float = r
@@ -209,9 +218,11 @@ static func _lamps(root: Node3D) -> void:
 					if absf(toward.z) > 0.5:
 						arm_mi.rotation.y = PI / 2.0
 					_mesh(body, bulb, toward * 0.8 + Vector3(0, 2.35, 0), bulb_mat)
+					out.append(p + toward * 0.8 + Vector3(0, 2.35, 0))
 					root.add_child(body)
 				alt = -alt
 			c += 24.0
+	return out
 
 
 static func _trees(root: Node3D, rng: RandomNumberGenerator) -> void:
@@ -399,7 +410,7 @@ static func _gas_station(root: Node3D, pois: Array) -> void:
 		_mesh(root, _box_mesh(Vector3(0.72, 0.4, 0.52)), Vector3(px, 1.2, -30), red)
 		_mesh(root, _box_mesh(Vector3(0.3, 0.2, 0.02)), Vector3(px, 1.0, -29.74), dark)
 	_building(root, Vector3(42, 2.5, -44), Vector3(8, 5, 6), 4, null, false)
-	_mesh(root, _box_mesh(Vector3(6.5, 2.4, 0.1)), Vector3(42, 1.4, -40.95), _mat(Color(0.15, 0.2, 0.25, 1.0)))
+	_mesh(root, _box_mesh(Vector3(6.5, 2.4, 0.1)), Vector3(42, 1.4, -40.95), _lit_glass(Color(0.15, 0.2, 0.25)))
 	_label(root, "POSTO", Vector3(30, 6.1, -25.4), Color(1, 1, 1), 0.0)
 	_poi(root, pois, "posto", "POSTO", "P", Vector3(30, 0, -22), Color(1.0, 0.3, 0.3))
 
@@ -465,7 +476,7 @@ static func _building(root: Node3D, pos: Vector3, size: Vector3, color_idx: int,
 		var half := size.x * 0.5 if along_x else size.z * 0.5
 		var width := (size.z if along_x else size.x) * 0.8
 		var front := Vector3(pos.x, 0.0, pos.z) + n * (half + 0.06)
-		_mesh(root, _box_mesh(Vector3(0.12, 2.6, width) if along_x else Vector3(width, 2.6, 0.12)), front + Vector3(0, 1.3, 0), _mat(Color(0.14, 0.2, 0.28)))
+		_mesh(root, _box_mesh(Vector3(0.12, 2.6, width) if along_x else Vector3(width, 2.6, 0.12)), front + Vector3(0, 1.3, 0), _lit_glass(Color(0.14, 0.2, 0.28)))
 		var awn: Color = AWNINGS[rng.randi() % AWNINGS.size()]
 		var aw_pos := Vector3(pos.x, 0.0, pos.z) + n * (half + 0.7) + Vector3(0, 3.0, 0)
 		_mesh(root, _box_mesh(Vector3(1.4, 0.1, width) if along_x else Vector3(width, 0.1, 1.4)), aw_pos, _mat(awn))
@@ -479,7 +490,7 @@ static func _hamburgueria(root: Node3D, pois: Array, pos: Vector3, size: Vector3
 	var half := size.x * 0.5 if along_x else size.z * 0.5
 	var width := (size.z if along_x else size.x) * 0.85
 	var base := Vector3(pos.x, 0.0, pos.z)
-	_mesh(root, _box_mesh(Vector3(0.12, 2.8, width) if along_x else Vector3(width, 2.8, 0.12)), base + n * (half + 0.06) + Vector3(0, 1.4, 0), _mat(Color(0.18, 0.22, 0.28)))
+	_mesh(root, _box_mesh(Vector3(0.12, 2.8, width) if along_x else Vector3(width, 2.8, 0.12)), base + n * (half + 0.06) + Vector3(0, 1.4, 0), _lit_glass(Color(0.18, 0.22, 0.28)))
 	var red := _mat(Color(0.85, 0.1, 0.08))
 	var yellow := _mat(Color(1.0, 0.8, 0.1))
 	_mesh(root, _box_mesh(Vector3(1.6, 0.1, width) if along_x else Vector3(width, 0.1, 1.6)), base + n * (half + 0.8) + Vector3(0, 3.1, 0), red)
@@ -535,7 +546,7 @@ static func _house(root: Node3D, cx: float, cz: float, lot_w: float, lot_d: floa
 	var width := d if along_x else w
 	var front := Vector3(cx, 0.0, cz) + n * (half + 0.05)
 	_mesh(root, _box_mesh(Vector3(0.1, 2.1, 1.0) if along_x else Vector3(1.0, 2.1, 0.1)), front + Vector3(0, 1.05, 0), _mat(Color(0.35, 0.22, 0.14)))
-	var glass := _mat(Color(0.2, 0.3, 0.4))
+	var glass := _lit_glass(Color(0.2, 0.3, 0.4))
 	var number_text := label if label != "" else str(10 + rng.randi() % 989)
 	_label(root, number_text, front + Vector3(0, 2.75, 0) + n * 0.05, Color(0.4, 1.0, 0.5) if label != "" else Color(1, 1, 1), atan2(n.x, n.z))
 	for off in [-width * 0.3, width * 0.3]:
@@ -652,6 +663,14 @@ static func _texture(kind: String) -> ImageTexture:
 								if x >= wx + 2 and x < wx + 18 and y >= wy + 2 and y < wy + 20:
 									var t := float(y - wy) / 22.0
 									c = Color(0.36 - 0.2 * t, 0.5 - 0.26 * t, 0.66 - 0.3 * t)
+				"facade_lit":
+					c = Color(0, 0, 0)
+					for wx in [6, 38]:
+						for wy in [6, 38]:
+							if wx == 38 and wy == 6:
+								continue   # uma janela apagada por bloco
+							if x >= wx + 2 and x < wx + 18 and y >= wy + 2 and y < wy + 20:
+								c = Color(1.0, 0.85, 0.5)
 				"stucco":
 					var v4 := 0.9 + r.randf() * 0.07
 					c = Color(v4, v4, v4)
@@ -674,6 +693,12 @@ static func _tex_mat(kind: String, color: Color, scale: float) -> StandardMateri
 	m.uv1_triplanar = true
 	m.uv1_scale = Vector3(scale, scale, scale)
 	m.roughness = 0.9
+	if kind == "facade":
+		m.emission_enabled = true
+		m.emission = Color.WHITE
+		m.emission_texture = _texture("facade_lit")
+		m.emission_energy_multiplier = 0.0
+		_lit.append(m)
 	return m
 
 
@@ -704,8 +729,20 @@ static func _box_mesh(size: Vector3) -> BoxMesh:
 	return b
 
 
+static func _lit_glass(color: Color) -> StandardMaterial3D:
+	var m := _mat(color)
+	m.emission_enabled = true
+	m.emission = Color(1.0, 0.85, 0.5)
+	m.emission_energy_multiplier = 0.0
+	_lit.append(m)
+	return m
+
+
 static func _mesh(parent: Node3D, mesh: Mesh, pos: Vector3, mat: Material) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
+	if mesh.get_aabb().size.length() < 30.0:
+		mi.visibility_range_end = 150.0   # peças pequenas somem longe (economiza desenho)
+		mi.visibility_range_end_margin = 10.0
 	mi.mesh = mesh
 	mi.material_override = mat
 	mi.position = pos

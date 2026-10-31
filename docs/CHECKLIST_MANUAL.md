@@ -59,6 +59,18 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Fechar e reabrir o jogo mantém dinheiro, moto escolhida, peças e cores
 - [ ] Moto tem aparência detalhada (conferir de perto na garagem)
 
+## Áudio, dia/noite e desempenho
+- [ ] Motor muda de rotação ao acelerar e dá "trancos" nas trocas de marcha
+- [ ] Derrapagem, borrachão e frenagem forte fazem som de pneu; batidas e quedas fazem impacto
+- [ ] Vento aumenta com a velocidade; ambiente urbano de fundo discreto
+- [ ] Sliders de volume (geral, motor/efeitos, ambiente) funcionam; o som para na pausa
+- [ ] Cliques nos menus fazem som; missão concluída e falha tocam sons diferentes
+- [ ] O dia vira noite: céu escurece, janelas e vitrines acendem, farol da moto liga, luzes de poste perto do jogador
+- [ ] O relógio no HUD avança; "Tempo parado" nas configurações congela a hora
+- [ ] Qualidade Baixa/Média/Alta muda sombras e alcance de visão; no Automático, se o FPS cair aparece o aviso de qualidade reduzida
+- [ ] REPOSICIONAR CONTROLES: arrastar botões, CONCLUIR salva, RESTAURAR PADRÃO volta ao original; reabrir o jogo mantém as posições
+- [ ] FPS médio (anotar aparelho e valor): ______  /  de noite: ______  /  qualidade usada: ______
+
 ## Interface
 - [ ] Multitoque: analógico (com grau) + ACEL ao mesmo tempo
 - [ ] Botões grandes o bastante e sem bloquear a visão da moto

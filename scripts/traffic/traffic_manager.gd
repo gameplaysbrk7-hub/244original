@@ -10,7 +10,6 @@ const LOOK := 6.0
 const CRUISE := 9.0
 const STOP_LINE := 8.0
 const CYCLE := 20.0
-const ACTIVE_RANGE := 110.0
 const MAX_CARS := 30
 const LIGHT_COLORS := [Color(0.1, 1.0, 0.2), Color(1.0, 0.85, 0.1), Color(1.0, 0.1, 0.1)]
 const CAR_COLORS := [
@@ -19,6 +18,7 @@ const CAR_COLORS := [
 ]
 
 var density: int = 10
+var active_range: float = 110.0   # carros mais longe que isso ficam congelados e ocultos
 var player: Node3D
 var cars: Array = []
 var time: float = 0.0
@@ -97,7 +97,7 @@ func _physics_process(delta: float) -> void:
 	time += delta
 	_apply_lights()
 	for car in cars:
-		var near: bool = player == null or car.position.distance_to(player.global_position) < ACTIVE_RANGE
+		var near: bool = player == null or car.position.distance_to(player.global_position) < active_range
 		car.visible = near
 		if near:
 			_step_car(car, delta)

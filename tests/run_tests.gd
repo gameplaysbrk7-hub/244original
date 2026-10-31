@@ -13,6 +13,11 @@ const BikeCatalog := preload("res://scripts/vehicle/bike_catalog.gd")
 const BikeModel := preload("res://scripts/vehicle/bike_model.gd")
 const MissionManager := preload("res://scripts/missions/mission_manager.gd")
 const TouchControls := preload("res://scripts/ui/touch_controls.gd")
+const SoundBank := preload("res://scripts/audio/sound_bank.gd")
+const AudioManager := preload("res://scripts/audio/audio_manager.gd")
+const DayNight := preload("res://scripts/city/day_night.gd")
+const GraphicsManager := preload("res://scripts/core/graphics_manager.gd")
+const PerformanceGuard := preload("res://scripts/core/performance_guard.gd")
 
 var failures: int = 0
 var checks: int = 0
@@ -43,10 +48,13 @@ func _run_all() -> void:
 	_test_settings()
 	_test_models()
 	_test_progression()
+	_test_sounds()
+	_test_settings_final()
 	await _test_vehicle()
 	await _test_city_and_traffic()
 	await _test_missions()
 	await _test_touch_wheelie()
+	await _test_polish()
 	await _test_camera_and_main()
 	print("== %d verificações, %d falhas ==" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -68,6 +76,11 @@ func _test_files() -> void:
 		"res://scripts/ui/garage_ui.gd",
 		"res://scripts/save/game_state.gd",
 		"res://scripts/missions/mission_manager.gd",
+		"res://scripts/audio/audio_manager.gd",
+		"res://scripts/audio/sound_bank.gd",
+		"res://scripts/city/day_night.gd",
+		"res://scripts/core/graphics_manager.gd",
+		"res://scripts/core/performance_guard.gd",
 		"res://resources/vehicles/corisco.tres",
 		"res://resources/vehicles/trovao.tres",
 	]:
@@ -269,6 +282,13 @@ func _test_camera_and_main() -> void:
 	m._start_playing()
 	await _frames(5)
 	check("jogar libera a simulação", m.mode == 1 and not m.get_tree().paused)
+	check("áudio, dia/noite, gráficos e proteção de desempenho presentes", m.audio != null and m.day != null and m.gfx != null and m.guard != null)
+	for t in ["sound", "graphics", "controls"]:
+		m.menu._set_stab(t)
+	m._enter_edit_controls()
+	check("reposicionar controles liga o modo de edição", m.touch.edit_mode and m._edit_bar.visible)
+	m._finish_edit_controls()
+	check("concluir desliga o modo de edição", (not m.touch.edit_mode) and (not m._edit_bar.visible))
 	m.queue_free()
 	await _frames(2)
 
@@ -490,5 +510,121 @@ func _test_touch_wheelie() -> void:
 	touch._on_drag(0, Vector2(150, 700), Vector2(0, 200))
 	touch._on_release(0)
 	check("controles: soltar o analógico desliga o grau e zera a direção", (not touch.wheelie) and is_zero_approx(touch.steer))
+	var base: Vector2 = touch._layout()["throttle"]["c"]
+	touch.offsets["throttle"] = Vector2(-0.1, 0.0)
+	var shifted: Vector2 = touch._layout()["throttle"]["c"]
+	check("controles: deslocamento salvo move o botão", is_equal_approx(base.x - shifted.x, 0.1 * touch.get_viewport_rect().size.x))
+	touch.edit_mode = true
+	touch._on_press(1, shifted)
+	touch._on_drag(1, shifted + Vector2(-50, 0), Vector2(-50, 0))
+	touch._on_release(1)
+	check("controles: arrastar no modo de edição reposiciona o botão", (touch.offsets["throttle"] as Vector2).x < -0.1)
+	check("controles: modo de edição não dispara a aceleração", touch.throttle == 0.0)
+	touch.reset_layout()
+	check("controles: restaurar padrão limpa as posições", touch.offsets.is_empty())
+	touch.edit_mode = false
 	touch.queue_free()
+	await _frames(2)
+
+
+func _test_sounds() -> void:
+	var eng := SoundBank.engine()
+	check("sons: motor em laço com dados", eng.loop_mode == AudioStreamWAV.LOOP_FORWARD and eng.data.size() > 40000)
+	var ok := true
+	for snd in [SoundBank.skid(), SoundBank.wind(), SoundBank.ambient(), SoundBank.impact(), SoundBank.crash(), SoundBank.click(), SoundBank.success(), SoundBank.fail()]:
+		ok = ok and snd.data.size() > 100
+	check("sons: derrapagem, vento, ambiente, impacto, queda, clique e jingles gerados", ok)
+
+
+func _test_settings_final() -> void:
+	var s := SettingsStore.new()
+	s.volume_master = 0.4
+	s.quality = 3
+	s.day_minutes = 12.0
+	s.time_of_day = 21.5
+	s.traffic_density = 14
+	s.control_offsets = {"throttle": Vector2(-0.05, 0.02)}
+	check("configurações finais: salvar", s.save_settings())
+	var s2 := SettingsStore.new()
+	var loaded := s2.load_settings()
+	check("configurações finais: volume, qualidade, dia/noite, trânsito e posições dos botões", loaded and is_equal_approx(s2.volume_master, 0.4) and s2.quality == 3 and is_equal_approx(s2.day_minutes, 12.0) and is_equal_approx(s2.time_of_day, 21.5) and s2.traffic_density == 14 and s2.control_offsets.has("throttle") and (s2.control_offsets["throttle"] as Vector2).is_equal_approx(Vector2(-0.05, 0.02)))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsStore.PATH))
+	s.free()
+	s2.free()
+
+
+func _test_polish() -> void:
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var bike := Motorcycle.new()
+	holder.add_child(bike)
+	var am := AudioManager.new()
+	holder.add_child(am)
+	am.bike = bike
+	await _frames(2)
+	bike.speed = 0.0
+	bike.input_throttle = 0.0
+	for i in 20:
+		am._process(0.1)
+	var idle: float = am._engine.pitch_scale
+	bike.burnout = true
+	for i in 20:
+		am._process(0.1)
+	var rev: float = am._engine.pitch_scale
+	check("áudio: rotação do motor sobe no borrachão", rev > idle + 0.5)
+	bike.burnout = false
+	bike.skid_level = 1.0
+	am._process(0.1)
+	check("áudio: derrapagem fica audível", am._skid.volume_db > -10.0)
+	am.apply_volumes(0.5, 0.5, 0.5)
+	var idx := AudioServer.get_bus_index("SFX")
+	check("áudio: volume por barramento", idx != -1 and is_equal_approx(AudioServer.get_bus_volume_db(idx), linear_to_db(0.5)))
+	am.apply_volumes(1.0, 1.0, 1.0)
+
+	var env := Environment.new()
+	var sky := ProceduralSkyMaterial.new()
+	var sun := DirectionalLight3D.new()
+	holder.add_child(sun)
+	var lit := StandardMaterial3D.new()
+	lit.emission_enabled = true
+	var dn := DayNight.new()
+	holder.add_child(dn)
+	dn.day_minutes = 0.0
+	dn.setup(env, sky, sun, [lit], [Vector3(5, 5, 5)], bike)
+	dn.set_time(12.0)
+	check("dia: ao meio-dia é dia claro, sem janelas acesas", dn.night < 0.05 and sun.light_energy > 0.9 and lit.emission_energy_multiplier < 0.05 and not bike._headlight.visible)
+	dn.set_time(0.0)
+	dn._update_lamp_lights()
+	check("noite: escurece, acende janelas, farol e luz de poste", dn.night > 0.95 and sun.light_energy < 0.3 and lit.emission_energy_multiplier > 1.0 and bike._headlight.visible and dn._omnis[0].visible)
+	dn.set_time(9.5)
+	check("relógio do jogo", dn.clock_text() == "09:30")
+
+	var cam := Camera3D.new()
+	holder.add_child(cam)
+	var tmgr := TrafficManager.new()
+	holder.add_child(tmgr)
+	var gfx := GraphicsManager.new()
+	holder.add_child(gfx)
+	gfx.setup(sun, cam, tmgr, dn, root)
+	gfx.apply(0)
+	check("gráficos: qualidade baixa desliga sombras e reduz alcance", (not sun.shadow_enabled) and cam.far < 150.0 and tmgr.active_range < 80.0 and gfx.traffic_cap() == 8)
+	gfx.apply(2)
+	check("gráficos: qualidade alta liga sombras", sun.shadow_enabled and cam.far > 250.0 and gfx.traffic_cap() == 30)
+	check("gráficos: configuração manual escolhe o nível", GraphicsManager.level_for_setting(1) == 0 and GraphicsManager.level_for_setting(3) == 2)
+	var guard := PerformanceGuard.new()
+	holder.add_child(guard)
+	guard.graphics = gfx
+	guard.evaluate(10.0)
+	check("desempenho: uma medição ruim ainda não reduz", gfx.level == 2)
+	guard.evaluate(12.0)
+	check("desempenho: duas medições ruins reduzem um nível", gfx.level == 1)
+	guard.evaluate(60.0)
+	guard.evaluate(10.0)
+	check("desempenho: medição boa zera a contagem", gfx.level == 1)
+	guard.evaluate(10.0)
+	guard.evaluate(10.0)
+	guard.evaluate(10.0)
+	guard.evaluate(10.0)
+	check("desempenho: nunca passa do nível mais baixo", gfx.level == 0)
+	holder.queue_free()
 	await _frames(2)

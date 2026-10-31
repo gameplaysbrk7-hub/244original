@@ -1,6 +1,14 @@
 extends RefCounted
 ## Pequenas ferramentas para montar menus por toque (botões grandes, estilo único).
 
+static var on_click: Callable   # definido pelo jogo para tocar o som de clique
+
+
+static func _click() -> void:
+	if on_click.is_valid():
+		on_click.call()
+
+
 static func style(color: Color, radius: int = 14) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = color
@@ -21,6 +29,7 @@ static func button(parent: Control, text: String, cb: Callable, color: Color = C
 	b.add_theme_stylebox_override("disabled", style(color.darkened(0.45)))
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	b.pressed.connect(cb)
+	b.pressed.connect(_click)
 	parent.add_child(b)
 	return b
 

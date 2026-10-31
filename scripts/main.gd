@@ -15,6 +15,11 @@ const BikeModel := preload("res://scripts/vehicle/bike_model.gd")
 const MissionManager := preload("res://scripts/missions/mission_manager.gd")
 const MenuUi := preload("res://scripts/ui/menu_ui.gd")
 const GarageUi := preload("res://scripts/ui/garage_ui.gd")
+const Kit := preload("res://scripts/ui/ui_kit.gd")
+const AudioManager := preload("res://scripts/audio/audio_manager.gd")
+const DayNight := preload("res://scripts/city/day_night.gd")
+const GraphicsManager := preload("res://scripts/core/graphics_manager.gd")
+const PerformanceGuard := preload("res://scripts/core/performance_guard.gd")
 
 enum Mode { MENU, PLAYING, PAUSED, GARAGE }
 
@@ -26,6 +31,10 @@ var traffic: TrafficManager
 var missions: MissionManager
 var menu: MenuUi
 var garage: GarageUi
+var audio: AudioManager
+var day: DayNight
+var gfx: GraphicsManager
+var guard: PerformanceGuard
 var state: GameState
 var city_info: Dictionary = {}
 var settings  # autoload GameSettings (ou instância local se não existir)
@@ -33,6 +42,7 @@ var mode: int = Mode.MENU
 
 var _return_mode: int = Mode.MENU
 var _garage_pos: Vector3 = Vector3.ZERO
+var _edit_bar: VBoxContainer
 
 
 func _ready() -> void:
@@ -93,6 +103,34 @@ func _ready() -> void:
 	hud.setup_minimap(bike, city_info, traffic, missions)
 	hud.set_money(state.money)
 
+	audio = AudioManager.new()
+	audio.name = "Audio"
+	add_child(audio)
+	audio.bike = bike
+	audio.apply_volumes(settings.volume_master, settings.volume_sfx, settings.volume_ambient)
+	Kit.on_click = audio.play_click
+
+	day = DayNight.new()
+	day.name = "DayNight"
+	add_child(day)
+	day.time_of_day = settings.time_of_day
+	day.day_minutes = settings.day_minutes
+	day.setup(city_info["env"], city_info["sky"], city_info["sun"], city_info["lit_materials"], city_info["lamps"], bike)
+
+	gfx = GraphicsManager.new()
+	gfx.name = "Graphics"
+	add_child(gfx)
+	gfx.setup(city_info["sun"], cam.camera, traffic, day, get_viewport())
+	gfx.apply(GraphicsManager.level_for_setting(settings.quality))
+	traffic.set_density(mini(settings.traffic_density, gfx.traffic_cap()))
+	guard = PerformanceGuard.new()
+	guard.name = "PerformanceGuard"
+	add_child(guard)
+	guard.graphics = gfx
+	guard.enabled = settings.quality == 0
+	guard.quality_reduced.connect(_on_quality_reduced)
+	touch.offsets = settings.control_offsets.duplicate()
+
 	var menus := CanvasLayer.new()
 	menus.layer = 20
 	menus.process_mode = Node.PROCESS_MODE_ALWAYS
@@ -106,6 +144,7 @@ func _ready() -> void:
 	garage.state = state
 	garage.bike = bike
 	menus.add_child(garage)
+	_build_edit_bar(menus)
 
 	touch.camera_drag.connect(cam.orbit)
 	touch.camera_zoom.connect(cam.zoom)
@@ -117,6 +156,10 @@ func _ready() -> void:
 	bike.wheelie_finished.connect(hud.show_wheelie_result)
 	bike.stoppie_finished.connect(hud.show_stoppie_result)
 	bike.crashed.connect(hud.show_message.bind("QUEDA!"))
+	bike.crashed.connect(audio.play_crash)
+	bike.impacted.connect(audio.play_impact)
+	touch.layout_changed.connect(_on_layout_changed)
+	menu.edit_controls_requested.connect(_enter_edit_controls)
 	state.money_changed.connect(hud.set_money)
 	missions.carrying_changed.connect(bike.set_carrying)
 	missions.started.connect(_on_mission_started)
@@ -157,6 +200,7 @@ func _physics_process(_delta: float) -> void:
 func _process(_delta: float) -> void:
 	hud.update_hud(bike)
 	hud.set_objective(missions.objective_text())
+	hud.set_clock(day.clock_text())
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -201,6 +245,7 @@ func _start_playing() -> void:
 	menu.close()
 	garage.close()
 	_touch_enabled(true)
+	guard.rearm()
 
 
 func _pause() -> void:
@@ -272,11 +317,51 @@ func _on_mission_started(m: Dictionary) -> void:
 
 
 func _on_mission_completed(_m: Dictionary, reward: int) -> void:
+	audio.play_success()
 	hud.show_message("MISSÃO COMPLETA!  +" + GameState.format_money(reward))
 
 
 func _on_mission_failed(_m: Dictionary, reason: String) -> void:
+	audio.play_fail()
 	hud.show_message("MISSÃO FALHOU: " + reason)
+
+
+# ------------------------------------------------- reposicionar controles / qualidade
+
+func _build_edit_bar(parent: Node) -> void:
+	_edit_bar = VBoxContainer.new()
+	_edit_bar.position = Vector2(24, 270)
+	_edit_bar.add_theme_constant_override("separation", 10)
+	Kit.button(_edit_bar, "RESTAURAR PADRÃO", func(): touch.reset_layout(), Color(0.4, 0.25, 0.15), Vector2(300, 60), 24)
+	Kit.button(_edit_bar, "CONCLUIR", _finish_edit_controls, Color(0.15, 0.45, 0.25), Vector2(300, 60), 28)
+	_edit_bar.visible = false
+	parent.add_child(_edit_bar)
+
+
+func _enter_edit_controls() -> void:
+	menu.close()
+	_touch_enabled(true)
+	touch.edit_mode = true
+	_edit_bar.visible = true
+
+
+func _finish_edit_controls() -> void:
+	touch.edit_mode = false
+	_edit_bar.visible = false
+	_touch_enabled(false)
+	settings.control_offsets = touch.offsets.duplicate()
+	settings.save_settings()
+	menu.open("settings")
+
+
+func _on_layout_changed() -> void:
+	settings.control_offsets = touch.offsets.duplicate()
+	settings.save_settings()
+
+
+func _on_quality_reduced(level: int) -> void:
+	hud.show_message("Qualidade reduzida (%s) para melhorar o desempenho" % GraphicsManager.NAMES[level])
+	traffic.set_density(mini(traffic.density, gfx.traffic_cap()))
 
 
 # --------------------------------------------------------------- configurações
@@ -284,7 +369,11 @@ func _on_mission_failed(_m: Dictionary, reason: String) -> void:
 func _apply_settings() -> void:
 	touch.steer_sensitivity = settings.steer_sensitivity
 	touch.ui_opacity = settings.control_opacity
-	traffic.set_density(settings.traffic_density)
+	audio.apply_volumes(settings.volume_master, settings.volume_sfx, settings.volume_ambient)
+	guard.enabled = settings.quality == 0
+	gfx.apply(GraphicsManager.level_for_setting(settings.quality))
+	traffic.set_density(mini(settings.traffic_density, gfx.traffic_cap()))
+	day.day_minutes = settings.day_minutes
 	settings.save_settings()
 
 
@@ -303,6 +392,8 @@ func _save_camera() -> void:
 	settings.camera_pitch = cam.pitch_deg
 	settings.camera_yaw_offset = cam.yaw_offset
 	settings.camera_first_person = cam.first_person
+	if day != null:
+		settings.time_of_day = day.time_of_day
 	settings.save_settings()
 
 

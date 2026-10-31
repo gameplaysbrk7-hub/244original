@@ -8,6 +8,7 @@ const BikeModel := preload("res://scripts/vehicle/bike_model.gd")
 const VehicleProfile := preload("res://scripts/vehicle/vehicle_profile.gd")
 
 signal crashed
+signal impacted(strength: float)
 signal wheelie_finished(duration: float, score: int)
 signal stoppie_finished(duration: float, score: int)
 
@@ -39,6 +40,7 @@ var move_yaw: float = 0.0       # direção real de deslocamento (difere do corp
 var burnout: bool = false
 var drifting: bool = false
 var fallen: bool = false
+var skid_level: float = 0.0      # intensidade de derrapagem/frenagem (usada pelo áudio)
 var carrying: bool = false     # levando um pedido (mostra a bolsa de entrega)
 var fall_timer: float = 0.0
 var fall_side: float = 1.0
@@ -56,6 +58,7 @@ var _front_wheel: Node3D
 var _rear_wheel: Node3D
 var _smoke: CPUParticles3D
 var _cs: CollisionShape3D
+var _headlight: SpotLight3D
 var _steer_mult: float = 1.0
 var _lean_mult: float = 1.0
 
@@ -99,6 +102,16 @@ func _ready() -> void:
 	_smoke.mesh = puff
 	add_child(_smoke)
 
+	_headlight = SpotLight3D.new()
+	_headlight.position = Vector3(0, 1.0, -profile.wheelbase)
+	_headlight.rotation = Vector3(-0.12, 0, 0)
+	_headlight.spot_range = 28.0
+	_headlight.spot_angle = 32.0
+	_headlight.light_energy = 2.5
+	_headlight.shadow_enabled = false
+	_headlight.visible = false
+	add_child(_headlight)
+
 	_build_visuals()
 	_spawn_transform = global_transform
 	move_yaw = rotation.y
@@ -118,6 +131,11 @@ func set_carrying(on: bool) -> void:
 		(parts["bag"] as Node3D).visible = on
 
 
+func set_headlight(on: bool) -> void:
+	if _headlight != null:
+		_headlight.visible = on
+
+
 func apply_customization(c: Dictionary) -> void:
 	custom = c
 	if not parts.is_empty():
@@ -129,6 +147,8 @@ func _build_visuals() -> void:
 	if _stoppie_pivot != null:
 		_stoppie_pivot.queue_free()
 	front_axle_z = -profile.wheelbase
+	if _headlight != null:
+		_headlight.position = Vector3(0, 1.0, front_axle_z)
 	_stoppie_pivot = Node3D.new()
 	_stoppie_pivot.position = Vector3(0, 0, front_axle_z)
 	add_child(_stoppie_pivot)
@@ -213,6 +233,7 @@ func _physics_process(delta: float) -> void:
 	if pitch <= 0.0:
 		if was_pitch > 0.3 and pitch_vel < -2.5:
 			speed *= 0.93
+			impacted.emit(4.0)
 		pitch = 0.0
 		pitch_vel = 0.0
 	if pitch >= profile.wheelie_max_pitch:
@@ -251,6 +272,18 @@ func _physics_process(delta: float) -> void:
 			stoppie_finished.emit(stoppie_time, int(stoppie_score))
 		stoppie_time = 0.0
 		stoppie_score = 0.0
+
+	# --- Intensidade sonora de derrapagem/frenagem
+	var skid := 0.0
+	if burnout:
+		skid = 1.0
+	elif drifting:
+		skid = clampf(absf(angle_difference(move_yaw, rotation.y)) * 3.0 + 0.3, 0.0, 1.0)
+	elif speed > 8.0 and (fb > 0.8 or rb > 0.8):
+		skid = 0.25
+	if stoppie > 0.1:
+		skid = maxf(skid, 0.6)
+	skid_level = skid
 
 	# --- Queda em curva: frear forte com a dianteira inclinado em alta velocidade
 	if speed > 25.0 and absf(input_steer) > 0.9 and fb > 0.5:
@@ -299,6 +332,8 @@ func _physics_process(delta: float) -> void:
 			rel.y = 0.0
 			var into := -rel.dot(n)
 			if into > 0.0:
+				if into > 2.0:
+					impacted.emit(into)
 				speed = maxf(0.0, speed - into * 1.1)
 				if into > profile.crash_speed_loss * 0.6:
 					_crash()
@@ -313,6 +348,7 @@ func _crash() -> void:
 	if fallen:
 		return
 	fallen = true
+	skid_level = 0.0
 	fall_timer = 0.0
 	if absf(lean) > 0.05:
 		fall_side = 1.0 if lean >= 0.0 else -1.0

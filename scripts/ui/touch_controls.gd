@@ -9,6 +9,7 @@ signal camera_reset_pressed
 signal respawn_pressed
 signal pause_pressed
 signal view_toggle_pressed
+signal layout_changed
 
 var steer: float = 0.0
 var throttle: float = 0.0
@@ -18,6 +19,8 @@ var wheelie: bool = false
 var balance: bool = false
 var drift: bool = false
 var ui_opacity: float = 0.55
+var offsets: Dictionary = {}     # id do botão -> Vector2 (fração da tela)
+var edit_mode: bool = false
 var steer_sensitivity: float = 1.0
 
 var _touches: Dictionary = {}   # índice do dedo -> função ("stick", "throttle", ..., "camera")
@@ -25,6 +28,7 @@ var _cam_pos: Dictionary = {}   # índice do dedo -> última posição (câmera)
 var _stick_origin: Vector2 = Vector2.ZERO
 var _stick_pos: Vector2 = Vector2.ZERO
 var _throttle_held: bool = false
+var _edit_drag: Dictionary = {}
 
 
 func _ready() -> void:
@@ -41,7 +45,7 @@ func _unit() -> float:
 func _layout() -> Dictionary:
 	var s := get_viewport_rect().size
 	var r := _unit() * 0.12
-	return {
+	var out := {
 		"throttle": {"c": Vector2(s.x - 1.7 * r, s.y - 1.7 * r), "r": 1.3 * r, "t": "ACEL", "col": Color(0.3, 1.0, 0.45)},
 		"brake_front": {"c": Vector2(s.x - 4.0 * r, s.y - 1.2 * r), "r": 0.8 * r, "t": "F.DIANT", "col": Color(1.0, 0.4, 0.35)},
 		"brake_rear": {"c": Vector2(s.x - 3.6 * r, s.y - 3.0 * r), "r": 0.8 * r, "t": "F.TRAS", "col": Color(1.0, 0.55, 0.3)},
@@ -52,6 +56,11 @@ func _layout() -> Dictionary:
 		"camera_reset": {"c": Vector2(s.x - 2.0 * r, 0.8 * r), "r": 0.5 * r, "t": "CÂM", "col": Color(0.5, 0.8, 1.0)},
 		"respawn": {"c": Vector2(s.x - 3.2 * r, 0.8 * r), "r": 0.5 * r, "t": "VOLTAR", "col": Color(0.8, 0.6, 1.0)},
 	}
+	for id in out:
+		if offsets.has(id):
+			var off: Vector2 = offsets[id]
+			out[id]["c"] = (out[id]["c"] as Vector2) + Vector2(off.x * s.x, off.y * s.y)
+	return out
 
 
 func _input(event: InputEvent) -> void:
@@ -67,6 +76,9 @@ func _input(event: InputEvent) -> void:
 
 
 func _on_press(idx: int, pos: Vector2) -> void:
+	if edit_mode:
+		_edit_press(idx, pos)
+		return
 	var lay := _layout()
 	for id in lay:
 		var b: Dictionary = lay[id]
@@ -98,6 +110,11 @@ func _on_press(idx: int, pos: Vector2) -> void:
 
 
 func _on_release(idx: int) -> void:
+	if edit_mode:
+		if _edit_drag.has(idx):
+			_edit_drag.erase(idx)
+			layout_changed.emit()
+		return
 	if not _touches.has(idx):
 		return
 	var kind: String = _touches[idx]
@@ -109,6 +126,9 @@ func _on_release(idx: int) -> void:
 
 
 func _on_drag(idx: int, pos: Vector2, relative: Vector2) -> void:
+	if edit_mode:
+		_edit_move(idx, pos, relative)
+		return
 	if not _touches.has(idx):
 		return
 	var kind: String = _touches[idx]
@@ -141,6 +161,36 @@ func _on_drag(idx: int, pos: Vector2, relative: Vector2) -> void:
 		else:
 			camera_drag.emit(relative)
 		_cam_pos[idx] = pos
+
+
+func _edit_press(idx: int, pos: Vector2) -> void:
+	var lay := _layout()
+	for id in lay:
+		var b: Dictionary = lay[id]
+		if pos.distance_to(b["c"]) <= float(b["r"]) * 1.2:
+			_edit_drag[idx] = id
+			return
+
+
+func _edit_move(idx: int, _pos: Vector2, relative: Vector2) -> void:
+	if not _edit_drag.has(idx):
+		return
+	var id: String = _edit_drag[idx]
+	var s := get_viewport_rect().size
+	var b: Dictionary = _layout()[id]
+	var r: float = b["r"]
+	var old_c: Vector2 = b["c"]
+	var c := old_c + relative
+	c.x = clampf(c.x, r, s.x - r)
+	c.y = clampf(c.y, r, s.y - r)
+	var moved := c - old_c
+	var cur: Vector2 = offsets.get(id, Vector2.ZERO)
+	offsets[id] = cur + Vector2(moved.x / s.x, moved.y / s.y)
+
+
+func reset_layout() -> void:
+	offsets.clear()
+	layout_changed.emit()
 
 
 func _recompute() -> void:
@@ -183,7 +233,7 @@ func _draw() -> void:
 		var c: Vector2 = b["c"]
 		var r: float = b["r"]
 		var col: Color = b["col"]
-		var down := held.has(id)
+		var down := held.has(id) or edit_mode
 		var fill := col
 		fill.a = ui_opacity * (0.75 if down else 0.3)
 		draw_circle(c, r, fill)
@@ -208,3 +258,5 @@ func _draw() -> void:
 	if not active:
 		draw_string(font, base + Vector2(-sr, sr + 28.0), "DIREÇÃO", HORIZONTAL_ALIGNMENT_CENTER, sr * 2.0, 22, Color(1, 1, 1, ui_opacity))
 		draw_string(font, base + Vector2(-sr, sr + 54.0), "puxe p/ trás = GRAU", HORIZONTAL_ALIGNMENT_CENTER, sr * 2.0, 18, Color(1, 0.85, 0.3, ui_opacity))
+	if edit_mode:
+		draw_string(font, Vector2(s.x * 0.5 - 320.0, s.y * 0.5), "Arraste os botões para onde quiser", HORIZONTAL_ALIGNMENT_CENTER, 640.0, 34, Color(1.0, 0.9, 0.4))

@@ -14,6 +14,7 @@ signal quit_pressed
 signal mission_start_requested(id: String)
 signal mission_cancel_requested
 signal settings_changed
+signal edit_controls_requested
 
 const PER_PAGE := 4
 const GOLD := Color(1.0, 0.85, 0.3)
@@ -27,6 +28,7 @@ var _box: VBoxContainer
 var _current: String = "title"
 var _page: int = 0
 var _status: String = ""
+var _stab: String = "controls"
 
 
 func _ready() -> void:
@@ -136,12 +138,34 @@ func _build_missions() -> void:
 
 
 func _build_settings() -> void:
-	Kit.label(_box, "CONFIGURAÇÕES", 48, GOLD)
-	_slider("steer", 0.4, 2.0, 0.05, settings.steer_sensitivity)
-	_slider("opacity", 0.15, 1.0, 0.05, settings.control_opacity)
-	_slider("traffic", 0.0, 30.0, 1.0, float(settings.traffic_density))
-	Kit.label(_box, "Reposicionar controles e volume: em breve", 20, Color(0.7, 0.72, 0.78))
-	Kit.button(_box, "VOLTAR", func(): open("pause" if in_game else "title"), Color(0.25, 0.25, 0.3))
+	Kit.label(_box, "CONFIGURAÇÕES", 44, GOLD)
+	var tabs := HBoxContainer.new()
+	tabs.alignment = BoxContainer.ALIGNMENT_CENTER
+	tabs.add_theme_constant_override("separation", 8)
+	_box.add_child(tabs)
+	for t in [["controls", "CONTROLES"], ["sound", "SOM"], ["graphics", "GRÁFICOS"]]:
+		var col := Color(0.25, 0.4, 0.65) if _stab == t[0] else Color(0.16, 0.2, 0.3)
+		Kit.button(tabs, str(t[1]), _set_stab.bind(str(t[0])), col, Vector2(190, 56), 24)
+	match _stab:
+		"controls":
+			_slider("steer", 0.4, 2.0, 0.05, settings.steer_sensitivity)
+			_slider("opacity", 0.15, 1.0, 0.05, settings.control_opacity)
+			Kit.button(_box, "REPOSICIONAR CONTROLES", func(): edit_controls_requested.emit(), Color(0.2, 0.35, 0.5), Vector2(520, 64), 28)
+		"sound":
+			_slider("master", 0.0, 1.0, 0.05, settings.volume_master)
+			_slider("sfx", 0.0, 1.0, 0.05, settings.volume_sfx)
+			_slider("ambient", 0.0, 1.0, 0.05, settings.volume_ambient)
+		"graphics":
+			_slider("quality", 0.0, 3.0, 1.0, float(settings.quality))
+			_slider("traffic", 0.0, 30.0, 1.0, float(settings.traffic_density))
+			_slider("day", 0.0, 30.0, 1.0, settings.day_minutes)
+	Kit.label(_box, "GC Moto Grau v1.0 - projeto original, sem arquivos de terceiros", 18, Color(0.6, 0.62, 0.7))
+	Kit.button(_box, "VOLTAR", func(): open("pause" if in_game else "title"), Color(0.25, 0.25, 0.3), Vector2(460, 60), 28)
+
+
+func _set_stab(t: String) -> void:
+	_stab = t
+	_rebuild()
 
 
 func _slider(which: String, min_v: float, max_v: float, step: float, value: float) -> void:
@@ -162,6 +186,16 @@ func _slider_text(which: String, v: float) -> String:
 			return "Sensibilidade da direção: %.2f" % v
 		"opacity":
 			return "Opacidade dos controles: %d%%" % int(v * 100.0)
+		"master":
+			return "Volume geral: %d%%" % int(v * 100.0)
+		"sfx":
+			return "Motor e efeitos: %d%%" % int(v * 100.0)
+		"ambient":
+			return "Ambiente: %d%%" % int(v * 100.0)
+		"quality":
+			return "Qualidade gráfica: " + ["Automática", "Baixa", "Média", "Alta"][clampi(int(v), 0, 3)]
+		"day":
+			return "Duração do dia: %d min" % int(v) if v > 0.5 else "Tempo parado (sem ciclo de dia e noite)"
 	return "Densidade do trânsito: %d carros" % int(v)
 
 
@@ -172,6 +206,16 @@ func _on_slider(v: float, which: String, lbl: Label) -> void:
 			settings.steer_sensitivity = v
 		"opacity":
 			settings.control_opacity = v
+		"master":
+			settings.volume_master = v
+		"sfx":
+			settings.volume_sfx = v
+		"ambient":
+			settings.volume_ambient = v
+		"quality":
+			settings.quality = int(v)
+		"day":
+			settings.day_minutes = v
 		"traffic":
 			settings.traffic_density = int(v)
 	settings_changed.emit()

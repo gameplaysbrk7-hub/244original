@@ -12,6 +12,7 @@ var _wheelie: Label
 var _msg: Label
 var _meter: Control
 var _minimap: Control
+var _clock: Label
 var _msg_time: float = 0.0
 
 
@@ -28,6 +29,7 @@ func _ready() -> void:
 	_objective.custom_minimum_size = Vector2(430, 0)
 	_objective.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_objective.add_theme_color_override("font_color", Color(0.6, 1.0, 0.8))
+	_clock = _label(30, false)
 	_wheelie = _label(38, false)
 	_wheelie.position = Vector2(24, 190)
 	_msg = _label(54, true)
@@ -59,6 +61,10 @@ func setup_minimap(bike: Node3D, info: Dictionary, traffic: Node, missions: Node
 	_minimap.traffic = traffic
 	_minimap.missions = missions
 	add_child(_minimap)
+
+
+func set_clock(text: String) -> void:
+	_clock.text = text
 
 
 func set_money(amount: int) -> void:
@@ -102,6 +108,7 @@ func _process(delta: float) -> void:
 	if _minimap != null:
 		_minimap.position = Vector2(get_viewport().get_visible_rect().size.x * 0.5 - 95.0, 10.0)
 		_minimap.queue_redraw()
+		_clock.position = Vector2(get_viewport().get_visible_rect().size.x * 0.5 + 108.0, 12.0)
 	if _msg_time > 0.0:
 		_msg_time -= delta
 		if _msg_time <= 0.0:
