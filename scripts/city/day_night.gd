@@ -21,6 +21,7 @@ var _sun: DirectionalLight3D
 var _lit: Array = []
 var _lamps: Array = []
 var _bike: Node3D
+var _focus: Node3D
 var _omnis: Array = []
 var _applied_night: float = -1.0
 var _was_night: bool = false
@@ -34,6 +35,7 @@ func setup(env: Environment, sky: ProceduralSkyMaterial, sun: DirectionalLight3D
 	_lit = lit_materials
 	_lamps = lamp_positions
 	_bike = bike
+	_focus = bike
 	for i in 4:
 		var o := OmniLight3D.new()
 		o.omni_range = 16.0
@@ -44,6 +46,10 @@ func setup(env: Environment, sky: ProceduralSkyMaterial, sun: DirectionalLight3D
 		add_child(o)
 		_omnis.append(o)
 	_apply(true)
+
+
+func set_focus(node: Node3D) -> void:
+	_focus = node
 
 
 func set_time(hours: float) -> void:
@@ -112,12 +118,12 @@ func _apply(force: bool) -> void:
 
 
 func _update_lamp_lights() -> void:
-	var active := use_lamp_lights and night > 0.05 and is_instance_valid(_bike) and not _lamps.is_empty()
+	var active := use_lamp_lights and night > 0.05 and is_instance_valid(_focus) and not _lamps.is_empty()
 	if not active:
 		for o in _omnis:
 			o.visible = false
 		return
-	var center: Vector3 = _bike.global_position
+	var center: Vector3 = _focus.global_position
 	var near: Array = []
 	for p in _lamps:
 		near.append([center.distance_squared_to(p), p])

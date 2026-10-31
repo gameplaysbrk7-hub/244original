@@ -10,6 +10,13 @@ tudo é gerado proceduralmente.
 
 ## O que já existe
 
+### Ré, andar a pé e queda
+- **Ré**: com a moto parada, toque no **freio traseiro** (um toque novo, sem estar freando em movimento) e a moto anda de ré devagar. O piloto apoia os **pés no chão** e dá passos, olhando para trás. O HUD mostra "RÉ". Na moto parada o piloto também apoia um pé no chão
+- **Descer e subir**: botão **DESCER** (topo da tela) com a moto quase parada; a pé aparece o botão **SUBIR** quando você está perto da moto. Animações de descer e subir
+- **A pé**: analógico para andar (relativo à câmera) e botão **CORRER** (segure). Animações de **caminhar** e **correr** (cinemática inversa de pernas e braços), som de passos, câmera livre. A cidade, as missões (entregas a pé funcionam), o minimapa e o trânsito acompanham o personagem; os carros param para ele
+- **Cair da moto**: ao bater, o piloto é **arremessado**, desliza, e se levanta. A moto **fica no chão** até você ir até ela e tocar em **LEVANTAR** (animação de levantar a moto); depois toque em **SUBIR** para pilotar de novo. Se a moto ficar presa ou longe, **VOLTAR** reposiciona a moto ao lado do personagem
+- **Piloto novo**: agora é um personagem articulado (o mesmo da caminhada). O artefato da cor da moto que aparecia no peito foi removido
+
 ### Fase 5 (acabamento)
 - **Áudio gerado por código** (nenhum arquivo de som externo): motor com rotação e **troca de marchas** (5 marchas), rajada de motor no borrachão, **derrapagem e frenagem**, vento proporcional à velocidade, **ambiente urbano**, **impactos**, **queda**, cliques de interface e jingles de missão (sucesso e falha). Volume geral, motor/efeitos e ambiente ajustáveis; o som pausa junto com o jogo
 - **Ciclo de dia e noite**: sol e lua, céu, névoa e luz ambiente mudam; ao anoitecer acendem **janelas e vitrines**, o **farol da moto** e 4 luzes de poste reaproveitadas junto do jogador (limite de luzes dinâmicas). Relógio no HUD; duração do dia configurável (0 = tempo parado)

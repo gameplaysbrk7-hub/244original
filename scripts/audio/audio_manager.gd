@@ -7,6 +7,7 @@ const SoundBank := preload("res://scripts/audio/sound_bank.gd")
 const GEARS := 5
 
 var bike: Node3D
+var rider_active: bool = true   # false quando o jogador está a pé: motor e vento ficam mudos
 
 var _engine: AudioStreamPlayer
 var _skid: AudioStreamPlayer
@@ -17,6 +18,7 @@ var _pool: Array = []
 var _impact: AudioStreamWAV
 var _crash: AudioStreamWAV
 var _click: AudioStreamWAV
+var _step: AudioStreamWAV
 var _success: AudioStreamWAV
 var _fail: AudioStreamWAV
 var _rpm: float = 0.2
@@ -48,6 +50,7 @@ func _ready() -> void:
 	_impact = SoundBank.impact()
 	_crash = SoundBank.crash()
 	_click = SoundBank.click()
+	_step = SoundBank.step()
 	_success = SoundBank.success()
 	_fail = SoundBank.fail()
 
@@ -83,7 +86,12 @@ func _process(delta: float) -> void:
 		p.stream_paused = paused
 	if paused:
 		return
-	var speed: float = bike.speed
+	if not rider_active:
+		_engine.volume_db = -80.0
+		_skid.volume_db = -80.0
+		_wind.volume_db = -80.0
+		return
+	var speed: float = absf(bike.speed)
 	var thr := clampf(float(bike.input_throttle), 0.0, 1.0)
 	var max_speed: float = bike.profile.max_speed
 	var span := max_speed / (GEARS + 0.4)
@@ -127,6 +135,10 @@ func play_success() -> void:
 
 func play_fail() -> void:
 	_play(_fail, -6.0, 1.0)
+
+
+func play_step(running: bool) -> void:
+	_play(_step, -9.0 if running else -13.0, randf_range(0.9, 1.15))
 
 
 func play_click() -> void:

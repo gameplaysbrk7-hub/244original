@@ -16,6 +16,7 @@ const CHECKPOINT_RADIUS := 7.0
 
 var state: Node
 var bike: Node3D
+var tracker: Node3D   # quem é medido nos objetivos (moto ou personagem a pé)
 var poi_positions: Dictionary = {}
 var poi_names: Dictionary = {}
 var active: Dictionary = {}
@@ -31,6 +32,7 @@ var _marker: MeshInstance3D
 func setup(game_state: Node, bike_node: Node3D, pois: Array) -> void:
 	state = game_state
 	bike = bike_node
+	tracker = bike_node
 	for p in pois:
 		poi_positions[p["id"]] = p["pos"]
 		poi_names[p["id"]] = p["name"]
@@ -121,7 +123,7 @@ func _physics_process(delta: float) -> void:
 		return
 	match active["type"]:
 		"delivery":
-			if _flat_distance(bike.global_position, objective_pos()) < DELIVERY_RADIUS:
+			if _flat_distance(_tracked_pos(), objective_pos()) < DELIVERY_RADIUS:
 				stage += 1
 				if stage >= 2:
 					_complete()
@@ -131,7 +133,7 @@ func _physics_process(delta: float) -> void:
 			if float(bike.wheelie_time) >= float(active["target"]):
 				_complete()
 		"checkpoints":
-			if _flat_distance(bike.global_position, objective_pos()) < CHECKPOINT_RADIUS:
+			if _flat_distance(_tracked_pos(), objective_pos()) < CHECKPOINT_RADIUS:
 				stage += 1
 				if stage >= (active["points"] as Array).size():
 					_complete()
@@ -162,6 +164,11 @@ func _update_marker() -> void:
 	_marker.visible = visible_now
 	if visible_now:
 		_marker.global_position = objective_pos() + Vector3(0, 15, 0)
+
+
+func _tracked_pos() -> Vector3:
+	var who: Node3D = tracker if is_instance_valid(tracker) else bike
+	return who.global_position
 
 
 static func _flat_distance(a: Vector3, b: Vector3) -> float:

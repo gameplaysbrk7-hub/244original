@@ -15,6 +15,7 @@ var yaw_offset: float = 0.0
 var orbit_sensitivity: float = 0.35  # graus por pixel
 var first_person: bool = false
 var showroom: bool = false
+var free_orbit: bool = false   # a pé: a câmera não gira sozinha com o personagem
 var showroom_distance: float = 3.6
 var view_pitch: float = 0.0  # inclinação da moto (grau/stoppie), usada na 1ª pessoa
 
@@ -23,6 +24,7 @@ var _focus: Vector3 = Vector3.ZERO
 var _cam_pos: Vector3 = Vector3.ZERO
 var _first: bool = true
 var _show_yaw: float = 0.6
+var _saved_distance: float = DEFAULT_DISTANCE
 
 
 func _ready() -> void:
@@ -49,6 +51,28 @@ func zoom(pixels: float) -> void:
 	distance = clampf(distance + pixels * 0.01, MIN_DISTANCE, MAX_DISTANCE)
 
 
+func begin_foot(who: Node3D) -> void:
+	if not free_orbit:
+		_saved_distance = distance
+	free_orbit = true
+	yaw_offset = who.global_rotation.y
+	distance = minf(distance, 4.2)
+	_first = true
+
+
+func end_foot() -> void:
+	if free_orbit:
+		distance = _saved_distance
+	free_orbit = false
+	yaw_offset = 0.0
+	_first = true
+
+
+## Direção para onde a câmera olha (usada para andar relativo à câmera).
+func get_view_yaw() -> float:
+	return (0.0 if free_orbit else _yaw) + yaw_offset
+
+
 func toggle_view() -> void:
 	first_person = not first_person
 	_first = true
@@ -66,7 +90,7 @@ func _physics_process(delta: float) -> void:
 	if showroom:
 		_update_showroom(delta)
 		return
-	if first_person:
+	if first_person and not free_orbit:
 		_update_first_person()
 		return
 	var target_yaw := target.global_rotation.y
@@ -78,6 +102,8 @@ func _physics_process(delta: float) -> void:
 		_yaw = lerp_angle(_yaw, target_yaw, 1.0 - exp(-3.0 * delta))
 		_focus = _focus.lerp(focus_goal, 1.0 - exp(-12.0 * delta))
 
+	if free_orbit:
+		_yaw = 0.0
 	var total_yaw := _yaw + yaw_offset
 	var p := deg_to_rad(pitch_deg)
 	var offset := Vector3(sin(total_yaw) * cos(p), sin(p), cos(total_yaw) * cos(p)) * distance

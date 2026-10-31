@@ -10,6 +10,7 @@ signal respawn_pressed
 signal pause_pressed
 signal view_toggle_pressed
 signal layout_changed
+signal mount_pressed
 
 var steer: float = 0.0
 var throttle: float = 0.0
@@ -21,6 +22,10 @@ var drift: bool = false
 var ui_opacity: float = 0.55
 var offsets: Dictionary = {}     # id do botão -> Vector2 (fração da tela)
 var edit_mode: bool = false
+var foot_mode: bool = false     # a pé: mostra CORRER e SUBIR/LEVANTAR e esconde os botões da moto
+var mount_label: String = "DESCER"
+var run: bool = false
+var stick_vec: Vector2 = Vector2.ZERO   # vetor do analógico (x direita, y para trás)
 var steer_sensitivity: float = 1.0
 
 var _touches: Dictionary = {}   # índice do dedo -> função ("stick", "throttle", ..., "camera")
@@ -45,6 +50,27 @@ func _unit() -> float:
 func _layout() -> Dictionary:
 	var s := get_viewport_rect().size
 	var r := _unit() * 0.12
+	var out: Dictionary = _foot_buttons(s, r) if foot_mode else _riding_buttons(s, r)
+	for id in out:
+		if offsets.has(id):
+			var off: Vector2 = offsets[id]
+			out[id]["c"] = (out[id]["c"] as Vector2) + Vector2(off.x * s.x, off.y * s.y)
+	return out
+
+
+func _foot_buttons(s: Vector2, r: float) -> Dictionary:
+	var out := {
+		"run": {"c": Vector2(s.x - 1.7 * r, s.y - 1.7 * r), "r": 1.2 * r, "t": "CORRER", "col": Color(0.3, 1.0, 0.45)},
+		"pause": {"c": Vector2(s.x - 0.8 * r, 0.8 * r), "r": 0.5 * r, "t": "PAUSA", "col": Color.WHITE},
+		"camera_reset": {"c": Vector2(s.x - 2.0 * r, 0.8 * r), "r": 0.5 * r, "t": "CÂM", "col": Color(0.5, 0.8, 1.0)},
+		"respawn": {"c": Vector2(s.x - 3.2 * r, 0.8 * r), "r": 0.5 * r, "t": "VOLTAR", "col": Color(0.8, 0.6, 1.0)},
+	}
+	if mount_label != "":
+		out["mount"] = {"c": Vector2(s.x - 3.9 * r, s.y - 1.3 * r), "r": 0.9 * r, "t": mount_label, "col": Color(1.0, 0.75, 0.4)}
+	return out
+
+
+func _riding_buttons(s: Vector2, r: float) -> Dictionary:
 	var out := {
 		"throttle": {"c": Vector2(s.x - 1.7 * r, s.y - 1.7 * r), "r": 1.3 * r, "t": "ACEL", "col": Color(0.3, 1.0, 0.45)},
 		"brake_front": {"c": Vector2(s.x - 4.0 * r, s.y - 1.2 * r), "r": 0.8 * r, "t": "F.DIANT", "col": Color(1.0, 0.4, 0.35)},
@@ -56,10 +82,7 @@ func _layout() -> Dictionary:
 		"camera_reset": {"c": Vector2(s.x - 2.0 * r, 0.8 * r), "r": 0.5 * r, "t": "CÂM", "col": Color(0.5, 0.8, 1.0)},
 		"respawn": {"c": Vector2(s.x - 3.2 * r, 0.8 * r), "r": 0.5 * r, "t": "VOLTAR", "col": Color(0.8, 0.6, 1.0)},
 	}
-	for id in out:
-		if offsets.has(id):
-			var off: Vector2 = offsets[id]
-			out[id]["c"] = (out[id]["c"] as Vector2) + Vector2(off.x * s.x, off.y * s.y)
+	out["mount"] = {"c": Vector2(s.x - 5.6 * r, 0.8 * r), "r": 0.5 * r, "t": "DESCER", "col": Color(1.0, 0.75, 0.4)}
 	return out
 
 
@@ -97,6 +120,8 @@ func _on_press(idx: int, pos: Vector2) -> void:
 					respawn_pressed.emit()
 				"view":
 					view_toggle_pressed.emit()
+				"mount":
+					mount_pressed.emit()
 			_recompute()
 			return
 	var s := get_viewport_rect().size
@@ -142,11 +167,15 @@ func _on_drag(idx: int, pos: Vector2, relative: Vector2) -> void:
 		var x := clampf(delta.x / radius, -1.0, 1.0)
 		steer = clampf(signf(x) * pow(absf(x), 1.4) * steer_sensitivity, -1.0, 1.0)
 		# Puxar o analógico para trás (dedo para baixo) liga o grau; com histerese
-		var pull := clampf(delta.y / radius, 0.0, 1.0)
-		if wheelie:
-			wheelie = pull > 0.35
+		stick_vec = (delta / radius).limit_length(1.0)
+		if foot_mode:
+			wheelie = false
 		else:
-			wheelie = pull > 0.55
+			var pull := clampf(delta.y / radius, 0.0, 1.0)
+			if wheelie:
+				wheelie = pull > 0.35
+			else:
+				wheelie = pull > 0.55
 	elif kind == "camera":
 		var prev: Vector2 = _cam_pos.get(idx, pos)
 		if _cam_pos.size() >= 2:
@@ -197,12 +226,14 @@ func _recompute() -> void:
 	var v := _touches.values()
 	brake_front = v.has("brake_front")
 	brake_rear = v.has("brake_rear")
+	run = v.has("run")
 	balance = v.has("balance")
 	drift = v.has("drift")
 	_throttle_held = v.has("throttle")
 	if not v.has("stick"):
 		steer = 0.0
 		wheelie = false
+		stick_vec = Vector2.ZERO
 
 
 func _release_all() -> void:
@@ -257,6 +288,7 @@ func _draw() -> void:
 		draw_string(font, knob + Vector2(-sr, -sr * 0.55), "GRAU!", HORIZONTAL_ALIGNMENT_CENTER, sr * 2.0, 30, Color(1.0, 0.85, 0.2))
 	if not active:
 		draw_string(font, base + Vector2(-sr, sr + 28.0), "DIREÇÃO", HORIZONTAL_ALIGNMENT_CENTER, sr * 2.0, 22, Color(1, 1, 1, ui_opacity))
-		draw_string(font, base + Vector2(-sr, sr + 54.0), "puxe p/ trás = GRAU", HORIZONTAL_ALIGNMENT_CENTER, sr * 2.0, 18, Color(1, 0.85, 0.3, ui_opacity))
+		if not foot_mode:
+			draw_string(font, base + Vector2(-sr, sr + 54.0), "puxe p/ trás = GRAU", HORIZONTAL_ALIGNMENT_CENTER, sr * 2.0, 18, Color(1, 0.85, 0.3, ui_opacity))
 	if edit_mode:
 		draw_string(font, Vector2(s.x * 0.5 - 320.0, s.y * 0.5), "Arraste os botões para onde quiser", HORIZONTAL_ALIGNMENT_CENTER, 640.0, 34, Color(1.0, 0.9, 0.4))

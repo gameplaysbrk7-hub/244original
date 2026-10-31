@@ -79,6 +79,20 @@ static func crash() -> AudioStreamWAV:
 	return _stream(out, false)
 
 
+static func step() -> AudioStreamWAV:
+	var n := int(RATE * 0.09)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += ((rng.randf() * 2.0 - 1.0) - lp) * 0.2
+		out[i] = (lp * 1.4 + sin(TAU * 110.0 * t) * 0.5) * exp(-t * 48.0)
+	return _stream(out, false)
+
+
 static func click() -> AudioStreamWAV:
 	var n := int(RATE * 0.07)
 	var out := PackedFloat32Array()

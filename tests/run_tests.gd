@@ -18,6 +18,8 @@ const AudioManager := preload("res://scripts/audio/audio_manager.gd")
 const DayNight := preload("res://scripts/city/day_night.gd")
 const GraphicsManager := preload("res://scripts/core/graphics_manager.gd")
 const PerformanceGuard := preload("res://scripts/core/performance_guard.gd")
+const Humanoid := preload("res://scripts/player/humanoid.gd")
+const Pedestrian := preload("res://scripts/player/pedestrian.gd")
 
 var failures: int = 0
 var checks: int = 0
@@ -55,6 +57,8 @@ func _run_all() -> void:
 	await _test_missions()
 	await _test_touch_wheelie()
 	await _test_polish()
+	_test_rider_model()
+	await _test_reverse_fall_foot()
 	await _test_camera_and_main()
 	print("== %d verificações, %d falhas ==" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -81,6 +85,8 @@ func _test_files() -> void:
 		"res://scripts/city/day_night.gd",
 		"res://scripts/core/graphics_manager.gd",
 		"res://scripts/core/performance_guard.gd",
+		"res://scripts/player/humanoid.gd",
+		"res://scripts/player/pedestrian.gd",
 		"res://resources/vehicles/corisco.tres",
 		"res://resources/vehicles/trovao.tres",
 	]:
@@ -282,6 +288,24 @@ func _test_camera_and_main() -> void:
 	m._start_playing()
 	await _frames(5)
 	check("jogar libera a simulação", m.mode == 1 and not m.get_tree().paused)
+	m.bike.input_brake_rear = 0.0
+	m._dismount()
+	check("a pé: descer da moto parada", m.on_foot and m.bike.parked and m.ped.visible)
+	await _frames(45)
+	check("a pé: personagem fica livre e perto da moto pode subir", m.ped.state == Pedestrian.State.WALK and m.touch.foot_mode and m.touch.mount_label == "SUBIR")
+	m._on_mount_pressed()
+	await _frames(50)
+	check("a pé: subir na moto devolve o controle", (not m.on_foot) and (not m.bike.parked) and m.bike.rider_on_bike and not m.ped.visible)
+	m.bike._crash()
+	check("queda: ao bater o piloto cai da moto", m.on_foot and m.bike.fallen and m.ped.state == Pedestrian.State.TUMBLE)
+	await _frames(170)
+	check("queda: personagem levanta e pode levantar a moto", m.ped.state == Pedestrian.State.WALK and m.touch.mount_label == "LEVANTAR")
+	m._on_mount_pressed()
+	await _frames(130)
+	check("queda: moto levantada fica estacionada em pé", (not m.bike.fallen) and m.bike.parked and m.touch.mount_label == "SUBIR")
+	m._on_mount_pressed()
+	await _frames(50)
+	check("queda: depois de levantar dá para subir e pilotar de novo", (not m.on_foot) and not m.bike.parked)
 	check("áudio, dia/noite, gráficos e proteção de desempenho presentes", m.audio != null and m.day != null and m.gfx != null and m.guard != null)
 	for t in ["sound", "graphics", "controls"]:
 		m.menu._set_stab(t)
@@ -523,6 +547,18 @@ func _test_touch_wheelie() -> void:
 	touch.reset_layout()
 	check("controles: restaurar padrão limpa as posições", touch.offsets.is_empty())
 	touch.edit_mode = false
+	touch.foot_mode = true
+	touch.mount_label = "SUBIR"
+	var lay: Dictionary = touch._layout()
+	check("controles a pé: CORRER e SUBIR, sem os botões da moto", lay.has("run") and lay.has("mount") and not lay.has("throttle") and not lay.has("brake_rear"))
+	touch.mount_label = ""
+	check("controles a pé: sem moto por perto não há botão SUBIR", not touch._layout().has("mount"))
+	touch._on_press(0, Vector2(150, 500))
+	touch._on_drag(0, Vector2(150, 700), Vector2(0, 200))
+	check("controles a pé: analógico vira movimento e não liga o grau", touch.stick_vec.y > 0.5 and not touch.wheelie)
+	touch._on_release(0)
+	touch.foot_mode = false
+	check("controles na moto: botão DESCER existe", touch._layout()["mount"]["t"] == "DESCER")
 	touch.queue_free()
 	await _frames(2)
 
@@ -626,5 +662,140 @@ func _test_polish() -> void:
 	guard.evaluate(10.0)
 	guard.evaluate(10.0)
 	check("desempenho: nunca passa do nível mais baixo", gfx.level == 0)
+	holder.queue_free()
+	await _frames(2)
+
+
+func _meshes(n: Node) -> Array:
+	var out: Array = []
+	if n is MeshInstance3D:
+		out.append(n)
+	for c in n.get_children():
+		out.append_array(_meshes(c))
+	return out
+
+
+func _test_rider_model() -> void:
+	var hn := Node3D.new()
+	root.add_child(hn)
+	var h := Humanoid.new()
+	h.build(hn)
+	h.pose(Pedestrian._stand())
+	check("humanoide: membros, cabeça e mãos criados", h.root.get_child_count() >= 15)
+	var knee := Humanoid.ik(Vector3(0, 0.93, 0), Vector3(0, 0.08, 0), 0.45, 0.45, Vector3(0, 0, -1))
+	check("humanoide: cinemática inversa respeita o osso e dobra o joelho para frente", absf(knee.distance_to(Vector3(0, 0.93, 0)) - 0.45) < 0.01 and knee.z < 0.0)
+	var a := Pedestrian.walk_pose(0.0, 0.0, 1.0)
+	var b := Pedestrian.walk_pose(PI / 2.0, 0.0, 1.0)
+	check("animação de caminhar move os pés", not (a["foot_l"] as Vector3).is_equal_approx(b["foot_l"]))
+	var run_pose := Pedestrian.walk_pose(PI / 2.0, 1.0, 1.0)
+	check("animação de correr tem passada maior que a de andar", absf((run_pose["foot_l"] as Vector3).z) > absf((b["foot_l"] as Vector3).z))
+	hn.free()
+	for id in BikeCatalog.ids():
+		var prof := BikeCatalog.load_profile(id)
+		var parts := BikeModel.build(prof, BikeModel.default_custom(prof))
+		var holder := Node3D.new()
+		root.add_child(holder)
+		holder.add_child(parts["root"])
+		var stray := 0
+		for mi in _meshes(parts["root"]):
+			if mi.material_override == parts["mats"]["body"]:
+				var gp: Vector3 = mi.global_position
+				if absf(gp.x) < 0.2 and gp.y > 1.2 and gp.y < 1.55 and gp.z > -0.65 and gp.z < -0.15:
+					stray += 1
+		check("moto %s: sem peça colorida solta no peito do piloto" % id, stray == 0)
+		holder.free()
+
+
+func _test_reverse_fall_foot() -> void:
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var floor_body := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(600, 2, 600)
+	cs.shape = bs
+	floor_body.add_child(cs)
+	floor_body.position = Vector3(0, -1, 0)
+	holder.add_child(floor_body)
+	var bike := Motorcycle.new()
+	bike.position = Vector3(0, 0.3, 0)
+	holder.add_child(bike)
+	await _frames(20)
+
+	var z0 := bike.global_position.z
+	bike.input_brake_rear = 1.0
+	await _frames(90)
+	check("ré: freio traseiro com a moto parada anda para trás", bike.reversing and bike.speed < -0.8 and bike.global_position.z > z0 + 0.5)
+	bike.input_brake_rear = 0.0
+	await _frames(40)
+	check("ré: soltar o freio para a moto", absf(bike.speed) < 0.1 and not bike.reversing)
+	bike.input_throttle = 1.0
+	await _frames(100)
+	bike.input_throttle = 0.0
+	bike.input_brake_rear = 1.0
+	var never_reverse := true
+	for i in 200:
+		await physics_frame
+		if bike.speed < -0.05:
+			never_reverse = false
+	check("ré: frear em movimento até parar não engata a ré sozinha", never_reverse)
+	bike.input_brake_rear = 0.0
+
+	bike.respawn()
+	bike._crash()
+	await _frames(150)
+	check("queda: a moto continua no chão até ser levantada", bike.fallen and absf(bike.lean) > 1.0)
+
+	var ped := Pedestrian.new()
+	holder.add_child(ped)
+	await _frames(2)
+	ped.begin_lift(bike)
+	bike.begin_lift()
+	var lifted := {"done": false}
+	ped.lift_finished.connect(func(): lifted["done"] = true)
+	for i in 160:
+		await physics_frame
+		bike.set_lift_progress(ped.lift_progress)
+		if lifted["done"]:
+			break
+	check("queda: personagem levanta a moto do chão", lifted["done"])
+	bike.finish_lift()
+	check("queda: depois de levantada a moto fica em pé e estacionada", (not bike.fallen) and bike.parked and absf(bike.lean) < 0.05)
+
+	ped.reset_beside(Vector3(20, 0.1, 20), 0.0)
+	await _frames(10)
+	var p0 := ped.global_position
+	ped.input_move = Vector2(0, -1)
+	ped.view_yaw = 0.0
+	await _frames(60)
+	var walked := p0.distance_to(ped.global_position)
+	check("a pé: andar para frente com o analógico", ped.global_position.z < p0.z - 1.5)
+	ped.reset_beside(Vector3(20, 0.1, 20), 0.0)
+	await _frames(10)
+	p0 = ped.global_position
+	ped.input_run = true
+	await _frames(60)
+	check("a pé: correr é mais rápido que andar", p0.distance_to(ped.global_position) > walked * 1.5)
+	ped.input_move = Vector2.ZERO
+	ped.input_run = false
+
+	ped.begin_dismount(Vector3(0, 0, 0), Vector3(1, 0, 0), 0.0)
+	check("a pé: animação de descer começa", ped.state == Pedestrian.State.DISMOUNT)
+	await _frames(40)
+	check("a pé: animação de descer termina e libera o personagem", ped.state == Pedestrian.State.WALK)
+	var mounted := {"ok": false}
+	ped.mount_finished.connect(func(): mounted["ok"] = true)
+	ped.begin_mount(bike)
+	await _frames(50)
+	check("a pé: animação de subir termina", mounted["ok"])
+
+	ped.reset_beside(Vector3(40, 0.1, 40), 0.0)
+	await _frames(10)
+	p0 = ped.global_position
+	ped.begin_tumble(Vector3(0, 0, -8), 0.0)
+	await _frames(20)
+	check("queda: personagem é arremessado e desliza", ped.state == Pedestrian.State.TUMBLE and ped.global_position.z < p0.z - 1.0)
+	await _frames(160)
+	check("queda: personagem se levanta sozinho", ped.state == Pedestrian.State.WALK)
 	holder.queue_free()
 	await _frames(2)

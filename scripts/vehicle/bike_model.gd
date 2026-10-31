@@ -35,7 +35,6 @@ static func build(profile, custom: Dictionary) -> Dictionary:
 		_:
 			_torrado(ctx)
 	_extras(ctx)
-	_rider(root, mats, int(profile.style), float(profile.wheelbase), ctx["head"])
 	return parts
 
 
@@ -498,57 +497,35 @@ static func _glow(color: Color) -> StandardMaterial3D:
 	return m
 
 
-static func _rider(root: Node3D, mats: Dictionary, style: int, wb: float, head: Vector3) -> void:
+## Pose-base do piloto (posições locais da moto) para o Humanoid articulado.
+static func rider_pose(profile) -> Dictionary:
+	var wb: float = profile.wheelbase
+	var wr: float = profile.wheel_radius
+	var style := clampi(int(profile.style), 0, 2)
+	var head_y: float = wr + [0.58, 0.6, 0.82][style]
+	var hand_z := -wb + 0.31
 	var hip := Vector3(0, 0.93, -0.12)
-	var shoulder := Vector3(0, 1.4, -0.4)
-	var head_pos := Vector3(0, 1.6, -0.46)
-	var hand_y := head.y + 0.13
-	var hand_x := 0.31
-	var knee := Vector3(0.26, 0.8, -0.52)
-	var foot := Vector3(0.25, 0.4, -0.38)
+	var chest := Vector3(0, 1.4, -0.4)
+	var head := Vector3(0, 1.6, -0.46)
+	var hand := Vector3(0.31, head_y + 0.13, hand_z)
+	var foot := Vector3(0.25, 0.46, -0.38)
 	if style == 1:
 		hip = Vector3(0, 0.95, -0.1)
-		shoulder = Vector3(0, 1.42, -0.4)
-		head_pos = Vector3(0, 1.62, -0.46)
-		hand_y = head.y + 0.15
-		hand_x = 0.32
-		knee = Vector3(0.26, 0.82, -0.52)
-		foot = Vector3(0.25, 0.43, -0.38)
+		chest = Vector3(0, 1.42, -0.4)
+		head = Vector3(0, 1.62, -0.46)
+		hand = Vector3(0.32, head_y + 0.15, hand_z)
+		foot = Vector3(0.25, 0.51, -0.38)
 	elif style == 2:
-		hip = Vector3(0, 1.14, -0.1)
-		shoulder = Vector3(0, 1.62, -0.3)
-		head_pos = Vector3(0, 1.82, -0.34)
-		hand_y = head.y + 0.26
-		hand_x = 0.4
-		knee = Vector3(0.27, 1.0, -0.5)
-		foot = Vector3(0.25, 0.5, -0.4)
-	var hand_z := -wb + 0.31
-	var jacket: Material = mats["jacket"]
-	var pants: Material = mats["pants"]
-	var dark: Material = mats["dark"]
-	_limb(root, hip, shoulder, 0.15, jacket)
-	_add(root, _box(Vector3(0.28, 0.2, 0.12)), shoulder + Vector3(0, -0.12, 0.02), mats["body"])
-	var sph := SphereMesh.new()
-	sph.radius = 0.15
-	sph.height = 0.3
-	sph.radial_segments = 14
-	sph.rings = 8
-	_add(root, sph, head_pos, mats["helmet"])
-	_add(root, _box(Vector3(0.2, 0.075, 0.1)), head_pos + Vector3(0, 0.01, -0.1), mats["glass"])
-	_add(root, _box(Vector3(0.03, 0.01, 0.28)), head_pos + Vector3(0, 0.15, 0.0), mats["body"])
-	for sx in [-1.0, 1.0]:
-		var sh := shoulder + Vector3(0.19 * sx, -0.02, 0)
-		var hand := Vector3(hand_x * sx, hand_y, hand_z)
-		var elbow := Vector3((sh.x + hand.x) * 0.5 + 0.07 * sx, (sh.y + hand.y) * 0.5 - 0.06, (sh.z + hand.z) * 0.5 + 0.04)
-		_limb(root, sh, elbow, 0.05, jacket)
-		_limb(root, elbow, hand, 0.045, jacket)
-		_add(root, _sphere(0.055), hand, dark)
-		var hp := Vector3(0.13 * sx, hip.y, hip.z)
-		var kn := Vector3(knee.x * sx, knee.y, knee.z)
-		var ft := Vector3(foot.x * sx, foot.y, foot.z)
-		_limb(root, hp, kn, 0.07, pants)
-		_limb(root, kn, ft, 0.06, pants)
-		_add(root, _box(Vector3(0.12, 0.1, 0.26)), ft + Vector3(0, -0.03, -0.05), dark)
+		hip = Vector3(0, 1.14, -0.2)
+		chest = Vector3(0, 1.6, -0.5)
+		head = Vector3(0, 1.8, -0.56)
+		hand = Vector3(0.4, head_y + 0.26, hand_z)
+		foot = Vector3(0.25, 0.56, -0.4)
+	return {
+		"hip": hip, "chest": chest, "head": head, "head_yaw": 0.0,
+		"hand_l": Vector3(-hand.x, hand.y, hand.z), "hand_r": hand,
+		"foot_l": Vector3(-foot.x, foot.y, foot.z), "foot_r": foot,
+	}
 
 
 static func _wheel(parent: Node3D, pos: Vector3, radius: float, mats: Dictionary, opts: Dictionary) -> Dictionary:

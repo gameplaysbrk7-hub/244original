@@ -20,6 +20,7 @@ const AudioManager := preload("res://scripts/audio/audio_manager.gd")
 const DayNight := preload("res://scripts/city/day_night.gd")
 const GraphicsManager := preload("res://scripts/core/graphics_manager.gd")
 const PerformanceGuard := preload("res://scripts/core/performance_guard.gd")
+const Pedestrian := preload("res://scripts/player/pedestrian.gd")
 
 enum Mode { MENU, PLAYING, PAUSED, GARAGE }
 
@@ -35,6 +36,8 @@ var audio: AudioManager
 var day: DayNight
 var gfx: GraphicsManager
 var guard: PerformanceGuard
+var ped: Pedestrian
+var on_foot: bool = false
 var state: GameState
 var city_info: Dictionary = {}
 var settings  # autoload GameSettings (ou instância local se não existir)
@@ -100,6 +103,11 @@ func _ready() -> void:
 	missions.name = "Missions"
 	add_child(missions)
 	missions.setup(state, bike, city_info["pois"])
+	ped = Pedestrian.new()
+	ped.name = "Pedestrian"
+	ped.visible = false
+	add_child(ped)
+	traffic.obstacles = [bike, ped]
 	hud.setup_minimap(bike, city_info, traffic, missions)
 	hud.set_money(state.money)
 
@@ -150,12 +158,17 @@ func _ready() -> void:
 	touch.camera_zoom.connect(cam.zoom)
 	touch.camera_drag_ended.connect(_save_camera)
 	touch.camera_reset_pressed.connect(_reset_camera)
-	touch.respawn_pressed.connect(bike.respawn)
+	touch.respawn_pressed.connect(_on_respawn_pressed)
+	touch.mount_pressed.connect(_on_mount_pressed)
+	ped.stepped.connect(audio.play_step)
+	ped.mount_finished.connect(_finish_mount)
+	ped.lift_finished.connect(_finish_lift)
+	bike.crashed.connect(_on_bike_crashed)
 	touch.pause_pressed.connect(_pause)
 	touch.view_toggle_pressed.connect(_toggle_view)
 	bike.wheelie_finished.connect(hud.show_wheelie_result)
 	bike.stoppie_finished.connect(hud.show_stoppie_result)
-	bike.crashed.connect(hud.show_message.bind("QUEDA!"))
+	bike.crashed.connect(hud.show_message.bind("QUEDA! Levante a moto"))
 	bike.crashed.connect(audio.play_crash)
 	bike.impacted.connect(audio.play_impact)
 	touch.layout_changed.connect(_on_layout_changed)
@@ -181,12 +194,28 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	var kb_thr := 1.0 if (Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)) else 0.0
 	var kb_steer := 0.0
 	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 		kb_steer += 1.0
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 		kb_steer -= 1.0
+	if on_foot:
+		var kb_back := 0.0
+		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+			kb_back -= 1.0
+		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+			kb_back += 1.0
+		var mv := touch.stick_vec
+		if mv.length() < 0.1:
+			mv = Vector2(kb_steer, kb_back)
+		ped.input_move = mv
+		ped.input_run = touch.run or Input.is_key_pressed(KEY_SHIFT)
+		ped.view_yaw = cam.get_view_yaw()
+		_zero_bike_inputs()
+		if ped.state == Pedestrian.State.LIFT:
+			bike.set_lift_progress(ped.lift_progress)
+		return
+	var kb_thr := 1.0 if (Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)) else 0.0
 	bike.input_throttle = maxf(touch.throttle, kb_thr)
 	bike.input_brake_front = 1.0 if (touch.brake_front or Input.is_key_pressed(KEY_SHIFT)) else 0.0
 	bike.input_brake_rear = 1.0 if (touch.brake_rear or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)) else 0.0
@@ -197,8 +226,22 @@ func _physics_process(_delta: float) -> void:
 	cam.view_pitch = bike.pitch - bike.stoppie
 
 
+func _zero_bike_inputs() -> void:
+	bike.input_throttle = 0.0
+	bike.input_brake_front = 0.0
+	bike.input_brake_rear = 0.0
+	bike.input_steer = 0.0
+	bike.input_wheelie = false
+	bike.input_balance = false
+	bike.input_drift = false
+
+
 func _process(_delta: float) -> void:
-	hud.update_hud(bike)
+	if on_foot:
+		hud.update_foot(ped)
+	else:
+		hud.update_hud(bike)
+	_update_mount_label()
 	hud.set_objective(missions.objective_text())
 	hud.set_clock(day.clock_text())
 
@@ -208,7 +251,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if key != null and key.pressed and not key.echo:
 		match key.keycode:
 			KEY_R:
-				bike.respawn()
+				_on_respawn_pressed()
 			KEY_C:
 				_reset_camera()
 			KEY_V:
@@ -262,12 +305,14 @@ func _pause() -> void:
 func _restart() -> void:
 	missions.cancel()
 	bike.respawn()
+	_reset_to_riding()
 	_start_playing()
 
 
 func _to_title() -> void:
 	missions.cancel()
 	bike.respawn()
+	_reset_to_riding()
 	state.save_game()
 	_enter_menu()
 
@@ -278,6 +323,9 @@ func _quit() -> void:
 
 
 func _open_garage() -> void:
+	if on_foot:
+		menu.set_status("Suba na moto para usar a garagem.")
+		return
 	if mode == Mode.PAUSED and bike.global_position.distance_to(_garage_pos) > 28.0:
 		menu.set_status("Vá até a GARAGEM (marcador G no minimapa).")
 		return
@@ -296,6 +344,107 @@ func _close_garage() -> void:
 		cam.showroom = false
 		cam.snap()
 		menu.open("pause")
+
+
+# ------------------------------------------- a pé: descer, subir, cair, levantar
+
+func _near_bike() -> bool:
+	return ped.global_position.distance_to(bike.global_position) < 3.2
+
+
+func _update_mount_label() -> void:
+	touch.foot_mode = on_foot
+	if not on_foot:
+		touch.mount_label = "DESCER"
+	elif ped.can_act() and _near_bike():
+		touch.mount_label = "LEVANTAR" if bike.fallen else "SUBIR"
+	else:
+		touch.mount_label = ""
+
+
+func _on_mount_pressed() -> void:
+	if mode != Mode.PLAYING:
+		return
+	if not on_foot:
+		_dismount()
+	elif ped.can_act() and _near_bike():
+		if bike.fallen:
+			_begin_lift()
+		else:
+			ped.begin_mount(bike)
+
+
+func _dismount() -> void:
+	if bike.fallen or bike.parked:
+		return
+	if absf(bike.speed) > 3.0 or bike.pitch > 0.05:
+		hud.show_message("Pare a moto para descer")
+		return
+	bike.parked = true
+	bike.set_rider_visible(false)
+	var side: Vector3 = bike.global_transform * Vector3(-0.95, 0.0, -0.15)
+	ped.begin_dismount(bike.seat_world(), side, bike.global_rotation.y)
+	_enter_foot()
+
+
+func _enter_foot() -> void:
+	on_foot = true
+	cam.target = ped
+	cam.begin_foot(ped)
+	_set_player(ped)
+	audio.rider_active = false
+
+
+func _finish_mount() -> void:
+	ped.visible = false
+	ped.state = Pedestrian.State.WALK
+	bike.parked = false
+	bike.set_rider_visible(true)
+	on_foot = false
+	cam.end_foot()
+	cam.target = bike
+	_set_player(bike)
+	audio.rider_active = true
+
+
+func _reset_to_riding() -> void:
+	if on_foot or bike.parked or not bike.rider_on_bike:
+		_finish_mount()
+
+
+func _set_player(node: Node3D) -> void:
+	traffic.player = node
+	missions.tracker = node
+	hud.set_tracking(node)
+	day.set_focus(node)
+
+
+func _begin_lift() -> void:
+	bike.begin_lift()
+	ped.begin_lift(bike)
+
+
+func _finish_lift() -> void:
+	bike.finish_lift()
+	hud.show_message("Moto levantada! Toque em SUBIR")
+
+
+func _on_bike_crashed() -> void:
+	if on_foot or mode != Mode.PLAYING:
+		return
+	bike.set_rider_visible(false)
+	ped.global_position = bike.global_transform * Vector3(0, 0.3, -0.2)
+	ped.begin_tumble(bike.crash_velocity, bike.global_rotation.y)
+	_enter_foot()
+
+
+func _on_respawn_pressed() -> void:
+	bike.respawn()
+	if on_foot:
+		bike.parked = true
+		bike.set_rider_visible(false)
+		ped.reset_beside(bike.global_transform * Vector3(-0.95, 0.05, -0.15), bike.global_rotation.y)
+		cam.begin_foot(ped)
 
 
 # ------------------------------------------------------------------- missões
@@ -388,9 +537,10 @@ func _reset_camera() -> void:
 
 
 func _save_camera() -> void:
-	settings.camera_distance = cam.distance
-	settings.camera_pitch = cam.pitch_deg
-	settings.camera_yaw_offset = cam.yaw_offset
+	if not cam.free_orbit:
+		settings.camera_distance = cam.distance
+		settings.camera_pitch = cam.pitch_deg
+		settings.camera_yaw_offset = cam.yaw_offset
 	settings.camera_first_person = cam.first_person
 	if day != null:
 		settings.time_of_day = day.time_of_day

@@ -6,6 +6,7 @@ extends CharacterBody3D
 
 const BikeModel := preload("res://scripts/vehicle/bike_model.gd")
 const VehicleProfile := preload("res://scripts/vehicle/vehicle_profile.gd")
+const Humanoid := preload("res://scripts/player/humanoid.gd")
 
 signal crashed
 signal impacted(strength: float)
@@ -14,6 +15,7 @@ signal stoppie_finished(duration: float, score: int)
 
 const GRAVITY := 24.0
 const STOPPIE_MAX := 0.55
+const REVERSE_SPEED := 1.4
 
 var profile: VehicleProfile
 var custom: Dictionary = {}
@@ -39,7 +41,13 @@ var lean: float = 0.0
 var move_yaw: float = 0.0       # direção real de deslocamento (difere do corpo na derrapagem)
 var burnout: bool = false
 var drifting: bool = false
-var fallen: bool = false
+var fallen: bool = false         # caída no chão: só levanta quando o jogador levantar a moto
+var parked: bool = false         # estacionada (jogador desceu): ignora comandos
+var reversing: bool = false      # andando de ré
+var being_lifted: bool = false   # jogador está levantando a moto
+var lift_t: float = 0.0
+var crash_velocity: Vector3 = Vector3.ZERO
+var rider_on_bike: bool = true
 var skid_level: float = 0.0      # intensidade de derrapagem/frenagem (usada pelo áudio)
 var carrying: bool = false     # levando um pedido (mostra a bolsa de entrega)
 var fall_timer: float = 0.0
@@ -59,6 +67,12 @@ var _rear_wheel: Node3D
 var _smoke: CPUParticles3D
 var _cs: CollisionShape3D
 var _headlight: SpotLight3D
+var _rider: Humanoid
+var _rider_base: Dictionary = {}
+var _rider_cur: Dictionary = {}
+var _rider_phase: float = 0.0
+var _rb_prev: float = 0.0
+var _reverse_ok: bool = false
 var _steer_mult: float = 1.0
 var _lean_mult: float = 1.0
 
@@ -125,6 +139,38 @@ func set_profile(p: VehicleProfile, c: Dictionary) -> void:
 		_build_visuals()
 
 
+func set_rider_visible(on: bool) -> void:
+	rider_on_bike = on
+	if _rider != null:
+		_rider.root.visible = on
+
+
+## Posição do banco no mundo (para o personagem descer/subir).
+func seat_world() -> Vector3:
+	return global_transform * Vector3(0, 0, -0.12)
+
+
+func begin_lift() -> void:
+	being_lifted = true
+	lift_t = 0.0
+
+
+func set_lift_progress(t: float) -> void:
+	lift_t = clampf(t, 0.0, 1.0)
+
+
+## Termina de levantar a moto: fica em pé e estacionada (sem piloto).
+func finish_lift() -> void:
+	being_lifted = false
+	fallen = false
+	parked = true
+	lean = 0.0
+	speed = 0.0
+	velocity = Vector3.ZERO
+	move_yaw = rotation.y
+	_update_visuals(0.016)
+
+
 func set_carrying(on: bool) -> void:
 	carrying = on
 	if parts.has("bag"):
@@ -166,6 +212,12 @@ func _build_visuals() -> void:
 	_rear_wheel = parts["rear_wheel"]
 	BikeModel.apply_custom(parts, custom)
 	(parts["bag"] as Node3D).visible = carrying
+	_rider = Humanoid.new()
+	_rider.build(_lean_pivot)
+	_rider_base = BikeModel.rider_pose(profile)
+	_rider_cur = _rider_base.duplicate()
+	_rider.pose(_rider_cur)
+	_rider.root.visible = rider_on_bike
 	_apply_suspension()
 	var shape := _cs.shape as BoxShape3D
 	shape.size = Vector3(0.5, 1.0, profile.wheelbase + 0.6)
@@ -188,6 +240,9 @@ func respawn() -> void:
 	stoppie_vel = 0.0
 	lean = 0.0
 	fallen = false
+	being_lifted = false
+	reversing = false
+	_reverse_ok = false
 	burnout = false
 	drifting = false
 	wheelie_time = 0.0
@@ -201,15 +256,32 @@ func _physics_process(delta: float) -> void:
 	if fallen:
 		_update_fallen(delta)
 		return
+	if parked:
+		_update_parked(delta)
+		return
 
 	var thr := clampf(input_throttle, 0.0, 1.0)
 	var fb := clampf(input_brake_front, 0.0, 1.0)
 	var rb := clampf(input_brake_rear, 0.0, 1.0)
 
+	# --- Marcha à ré: só com a moto parada e um novo toque no freio traseiro
+	var fresh_rb := rb > 0.5 and _rb_prev <= 0.5
+	_rb_prev = rb
+	if fresh_rb and absf(speed) < 0.5 and thr < 0.1 and fb < 0.3:
+		_reverse_ok = true
+	if rb < 0.3 or thr > 0.1 or fb > 0.3 or speed > 0.6:
+		_reverse_ok = false
+	reversing = _reverse_ok
+
 	# --- Longitudinal
-	var drive := thr * profile.accel * (1.0 - clampf(speed / profile.max_speed, 0.0, 1.0))
-	var resist := profile.rolling_resistance + profile.air_drag * speed + fb * profile.brake_front + rb * profile.brake_rear
-	speed = clampf(speed + (drive - resist) * delta, 0.0, profile.max_speed)
+	if reversing:
+		speed = move_toward(speed, -REVERSE_SPEED, 3.5 * delta)
+	elif speed < 0.0:
+		speed = move_toward(speed, 0.0, 6.0 * delta)
+	else:
+		var drive := thr * profile.accel * (1.0 - clampf(speed / profile.max_speed, 0.0, 1.0))
+		var resist := profile.rolling_resistance + profile.air_drag * speed + fb * profile.brake_front + rb * profile.brake_rear
+		speed = clampf(speed + (drive - resist) * delta, 0.0, profile.max_speed)
 
 	# --- Borrachão (parado/lento) e derrapagem lateral (em velocidade)
 	burnout = input_drift and thr > 0.3 and speed < 6.0
@@ -296,8 +368,11 @@ func _physics_process(delta: float) -> void:
 	if burnout:
 		rate = profile.steer_rate * _steer_mult * 1.2 * clampf(input_steer, -1.0, 1.0)
 	else:
-		var speed_factor := clampf(speed / 6.0, 0.0, 1.0)
-		rate = profile.steer_rate * _steer_mult * clampf(input_steer, -1.0, 1.0) * speed_factor / (1.0 + speed * profile.steer_falloff)
+		var speed_factor := clampf(absf(speed) / 6.0, 0.0, 1.0)
+		if reversing:
+			speed_factor = 0.55
+		var dir_sign := 1.0 if speed >= 0.0 else -1.0
+		rate = profile.steer_rate * _steer_mult * clampf(input_steer, -1.0, 1.0) * speed_factor * dir_sign / (1.0 + absf(speed) * profile.steer_falloff)
 		if drifting:
 			rate *= 1.6
 	rate *= 1.0 - 0.5 * clampf(pitch, 0.0, 1.0)
@@ -347,7 +422,10 @@ func _physics_process(delta: float) -> void:
 func _crash() -> void:
 	if fallen:
 		return
+	crash_velocity = Vector3(velocity.x, 0.0, velocity.z)
 	fallen = true
+	reversing = false
+	_reverse_ok = false
 	skid_level = 0.0
 	fall_timer = 0.0
 	if absf(lean) > 0.05:
@@ -369,17 +447,28 @@ func _crash() -> void:
 
 
 func _update_fallen(delta: float) -> void:
-	fall_timer += delta
 	velocity.x = move_toward(velocity.x, 0.0, 20.0 * delta)
 	velocity.z = move_toward(velocity.z, 0.0, 20.0 * delta)
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
-	lean = lerpf(lean, fall_side * 1.45, 1.0 - exp(-8.0 * delta))
-	if fall_timer > 1.8:
-		fallen = false
-		lean = 0.0
-		speed = 0.0
-		move_yaw = rotation.y
+	if being_lifted:
+		lean = fall_side * 1.45 * (1.0 - smoothstep(0.0, 1.0, lift_t))
+	else:
+		lean = lerpf(lean, fall_side * 1.45, 1.0 - exp(-8.0 * delta))
+	_update_visuals(delta)
+
+
+func _update_parked(delta: float) -> void:
+	speed = move_toward(speed, 0.0, 12.0 * delta)
+	skid_level = 0.0
+	burnout = false
+	drifting = false
+	reversing = false
+	var fwd := Vector3(-sin(move_yaw), 0.0, -cos(move_yaw))
+	velocity.x = fwd.x * speed
+	velocity.z = fwd.z * speed
+	velocity.y -= GRAVITY * delta
+	move_and_slide()
 	_update_visuals(delta)
 
 
@@ -393,3 +482,48 @@ func _update_visuals(delta: float) -> void:
 	var steer_visual := -clampf(input_steer, -1.0, 1.0) * 0.35
 	_fork.rotation.y = lerpf(_fork.rotation.y, steer_visual, 1.0 - exp(-12.0 * delta))
 	_smoke.emitting = burnout or drifting
+	_update_rider(delta)
+
+
+## Anima o piloto: inclina com a curva e a frenagem, recua no grau, põe os pés no chão
+## para andar de ré e apoia um pé quando a moto está parada.
+func _update_rider(delta: float) -> void:
+	if _rider == null or not rider_on_bike:
+		return
+	var base_hip: Vector3 = _rider_base["hip"]
+	var hip := base_hip
+	var chest: Vector3 = _rider_base["chest"]
+	var head: Vector3 = _rider_base["head"]
+	var foot_l: Vector3 = _rider_base["foot_l"]
+	var foot_r: Vector3 = _rider_base["foot_r"]
+	var shift := Vector3(-lean * 0.06, 0.0, -0.05 * input_brake_front + 0.08 * clampf(pitch, 0.0, 1.0))
+	chest += shift
+	head += shift * 1.3
+	var head_yaw := 0.0
+	if reversing:
+		_rider_phase += absf(speed) * delta * PI / (2.0 * 0.28)
+		var drop_y := minf(0.0, 0.98 - base_hip.y)
+		var slide := Vector3(0.0, drop_y, -0.1)
+		hip += slide
+		chest += slide + Vector3(-0.08, 0.0, 0.0)
+		head += slide + Vector3(-0.1, 0.0, 0.0)
+		head_yaw = 1.5
+		for i in 2:
+			var sgn := -1.0 if i == 0 else 1.0
+			var ph := _rider_phase + (0.0 if i == 0 else PI)
+			var foot := Vector3(0.3 * sgn, 0.08 + 0.14 * maxf(0.0, cos(ph)), -0.3 + 0.28 * sin(ph))
+			if i == 0:
+				foot_l = foot
+			else:
+				foot_r = foot
+	elif absf(speed) < 0.8 and input_throttle < 0.1:
+		foot_l = Vector3(-0.3, 0.08, -0.3)
+		chest += Vector3(-0.06, 0.0, 0.0)
+		head += Vector3(-0.06, 0.0, 0.0)
+	var target := {
+		"hip": hip, "chest": chest, "head": head, "head_yaw": head_yaw,
+		"hand_l": _rider_base["hand_l"], "hand_r": _rider_base["hand_r"],
+		"foot_l": foot_l, "foot_r": foot_r,
+	}
+	_rider_cur = Humanoid.lerp_pose(_rider_cur, target, 1.0 - exp(-12.0 * delta))
+	_rider.pose(_rider_cur)

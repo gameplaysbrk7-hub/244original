@@ -76,8 +76,19 @@ func set_objective(text: String) -> void:
 	_objective.visible = text != ""
 
 
+func set_tracking(node: Node3D) -> void:
+	if _minimap != null:
+		_minimap.bike = node
+
+
+func update_foot(ped: Node) -> void:
+	_speed.text = "CORRENDO" if ped.speed > 4.2 else ("ANDANDO" if ped.speed > 0.5 else "A PÉ")
+	_wheelie.visible = false
+	_meter.visible = false
+
+
 func update_hud(bike: Node) -> void:
-	_speed.text = "%d km/h" % int(bike.speed * 3.6)
+	_speed.text = ("RÉ  " if bike.reversing else "") + "%d km/h" % int(absf(bike.speed) * 3.6)
 	if bike.pitch > 0.1:
 		_wheelie.text = "GRAU %.1fs  +%d" % [bike.wheelie_time, int(bike.wheelie_score)]
 		_wheelie.visible = true

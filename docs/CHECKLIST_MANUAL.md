@@ -29,6 +29,18 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Câmera não atravessa prédios nem muros
 - [ ] Fechar e reabrir o jogo mantém distância e altura da câmera
 
+## Ré, andar a pé e queda
+- [ ] Moto parada + toque no freio traseiro: anda de ré devagar, o piloto põe os pés no chão e anda como na vida real; soltar o freio para
+- [ ] Frear em movimento até parar NÃO engata a ré sozinha
+- [ ] Não existe mais o artefato da cor da moto no peito do piloto
+- [ ] DESCER com a moto parada: o personagem desce e passa a andar; em movimento aparece "Pare a moto para descer"
+- [ ] Analógico anda; CORRER (segurado) corre; animações de andar e correr; passos soam
+- [ ] Perto da moto aparece SUBIR; subir devolve o controle da moto
+- [ ] Bater forte: o piloto cai, desliza e levanta; a moto fica no chão
+- [ ] LEVANTAR (perto da moto caída) levanta a moto; depois SUBIR volta a pilotar
+- [ ] Carros param para o personagem a pé; entregas podem ser feitas a pé; minimapa segue o personagem
+- [ ] VOLTAR a pé reposiciona a moto ao lado do personagem
+
 ## Cidade e trânsito
 - [ ] Os carros andam pelas ruas, fazem curvas nos cruzamentos e param no vermelho
 - [ ] Existem 3 hamburguerias (letreiro, toldo, hambúrguer no telhado) e casas "CASA 1..8" com marcador verde

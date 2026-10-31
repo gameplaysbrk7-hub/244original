@@ -20,6 +20,7 @@ const CAR_COLORS := [
 var density: int = 10
 var active_range: float = 110.0   # carros mais longe que isso ficam congelados e ocultos
 var player: Node3D
+var obstacles: Array = []   # outros alvos que os carros respeitam (moto estacionada, pedestre)
 var cars: Array = []
 var time: float = 0.0
 var nodes: Array = []
@@ -168,6 +169,9 @@ func _obstacle_ahead(car: TrafficCar, pos: Vector3, fwd: Vector3, right: Vector3
 			return true
 	if player != null and _in_front(player.global_position, pos, fwd, right, reach):
 		return true
+	for o in obstacles:
+		if is_instance_valid(o) and o.visible and _in_front(o.global_position, pos, fwd, right, reach):
+			return true
 	return false
 
 
