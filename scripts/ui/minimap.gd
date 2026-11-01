@@ -1,7 +1,9 @@
 extends Control
 ## Minimapa (norte para cima) centrado na moto: ruas, pontos de interesse e trânsito.
 
-const ZOOM_M := 130.0   # metros mostrados na largura do minimapa
+var zoom_m: float = 130.0        # metros mostrados na largura
+var fixed_center: bool = false   # true: mapa grande centrado na cidade
+var show_names: bool = false     # true: escreve o nome dos pontos de interesse
 
 var bike: Node3D
 var traffic: Node
@@ -17,15 +19,15 @@ func _init() -> void:
 
 
 func _w2m(p: Vector3) -> Vector2:
-	var c := bike.global_position
-	return size * 0.5 + Vector2(p.x - c.x, p.z - c.z) * (size.x / ZOOM_M)
+	var c := Vector3.ZERO if fixed_center else bike.global_position
+	return size * 0.5 + Vector2(p.x - c.x, p.z - c.z) * (size.x / zoom_m)
 
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.1, 0.12, 0.1, 0.65))
 	if bike == null or info.is_empty():
 		return
-	var s := size.x / ZOOM_M
+	var s := size.x / zoom_m
 	var half: float = info["half"]
 	var rw: float = info["road_w"]
 	var road_col := Color(0.5, 0.5, 0.56)
@@ -40,6 +42,8 @@ func _draw() -> void:
 		var m := _w2m(p["pos"])
 		draw_circle(m, 7.0, p["color"])
 		draw_string(font, m + Vector2(-4, 5), p["short"], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.BLACK)
+		if show_names:
+			draw_string(font, m + Vector2(10, 5), p["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
 	if traffic != null:
 		for car in traffic.cars:
 			draw_circle(_w2m(car.position), 2.5, Color(0.85, 0.85, 0.85))

@@ -19,6 +19,7 @@ var _impact: AudioStreamWAV
 var _crash: AudioStreamWAV
 var _click: AudioStreamWAV
 var _step: AudioStreamWAV
+var _shutter: AudioStreamWAV
 var _success: AudioStreamWAV
 var _fail: AudioStreamWAV
 var _rpm: float = 0.2
@@ -51,6 +52,7 @@ func _ready() -> void:
 	_crash = SoundBank.crash()
 	_click = SoundBank.click()
 	_step = SoundBank.step()
+	_shutter = SoundBank.shutter()
 	_success = SoundBank.success()
 	_fail = SoundBank.fail()
 
@@ -139,6 +141,10 @@ func play_fail() -> void:
 
 func play_step(running: bool) -> void:
 	_play(_step, -9.0 if running else -13.0, randf_range(0.9, 1.15))
+
+
+func play_shutter() -> void:
+	_play(_shutter, -4.0, 1.0)
 
 
 func play_click() -> void:

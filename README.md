@@ -10,6 +10,15 @@ tudo é gerado proceduralmente.
 
 ## O que já existe
 
+### Celular
+- **Botão do celular** (só a imagem, sem texto) fica na parte de baixo da tela, na moto e a pé. Ao tocar, o **celular sobe da borda da tela** e fica inteiro visível do lado direito; o jogo pausa. Para fechar, toque no pequeno **X** no canto superior direito do celular (ele desce). Tecla P no teclado
+- **Mapa**: mapa grande da cidade com nomes (garagem, oficina, posto, treino, hamburguerias, casas), carros, sua posição e o objetivo
+- **Entregas**: mostra a entrega em andamento (de onde, para onde, distância, direção, tempo, recompensa) ou as hamburguerias mais próximas; abre o mapa
+- **Corridas**: lista dos desafios de grau e percursos com checkpoints
+- **Configurações**: abre as configurações **direto pelo celular**; o botão Configurações **não existe mais no menu de pausa** (só na tela inicial, que não tem celular). Voltar retoma o jogo
+- **Ligações**: **guincho** (R$ 100) traz a moto até você quando está a pé
+- **Câmera**: tira uma foto da tela sem a interface (tenta salvar na pasta Imagens do aparelho, em GCMotoGrau; se o Android não permitir, salva na pasta privada do jogo `user://fotos`)
+
 ### Ré, andar a pé e queda
 - **Ré**: com a moto parada, toque no **freio traseiro** (um toque novo, sem estar freando em movimento) e a moto anda de ré devagar. O piloto apoia os **pés no chão** e dá passos, olhando para trás. O HUD mostra "RÉ". Na moto parada o piloto também apoia um pé no chão
 - **Descer e subir**: botão **DESCER** (topo da tela) com a moto quase parada; a pé aparece o botão **SUBIR** quando você está perto da moto. Animações de descer e subir

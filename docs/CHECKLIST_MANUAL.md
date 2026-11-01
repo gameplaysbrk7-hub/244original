@@ -29,6 +29,15 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Câmera não atravessa prédios nem muros
 - [ ] Fechar e reabrir o jogo mantém distância e altura da câmera
 
+## Celular
+- [ ] O botão do celular aparece só com a imagem (sem texto), na moto e a pé
+- [ ] Tocar nele faz o celular subir da borda de baixo e ficar inteiro visível do lado direito
+- [ ] O "X" no canto superior direito fecha o celular (ele desce) e o jogo continua
+- [ ] Mapa abre o mapa grande com nomes; Entregas mostra a entrega atual ou as hamburguerias; Corridas lista grau e percursos
+- [ ] Configurações abre direto e VOLTAR retoma o jogo; no menu de pausa NÃO existe mais Configurações
+- [ ] Ligações → Guincho (a pé) traz a moto e cobra R$ 100
+- [ ] Câmera tira a foto sem a interface; a mensagem mostra onde foi salva (conferir na galeria ou na pasta do jogo)
+
 ## Botão de interação
 - [ ] O botão de interação só aparece quando a moto (ou o personagem) está parada em cima de um marcador
 - [ ] Na garagem o botão se chama GARAGEM e abre a garagem direto; ao sair, o jogo continua sem passar pela pausa

@@ -12,6 +12,7 @@ signal view_toggle_pressed
 signal layout_changed
 signal mount_pressed
 signal interact_pressed
+signal phone_pressed
 
 var steer: float = 0.0
 var throttle: float = 0.0
@@ -36,9 +37,11 @@ var _stick_origin: Vector2 = Vector2.ZERO
 var _stick_pos: Vector2 = Vector2.ZERO
 var _throttle_held: bool = false
 var _edit_drag: Dictionary = {}
+var _phone_icon: Texture2D
 
 
 func _ready() -> void:
+	_phone_icon = load("res://assets/ui/phone_button.png")
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -60,6 +63,10 @@ func _layout() -> Dictionary:
 	return out
 
 
+func _add_phone(out: Dictionary, s: Vector2, r: float) -> void:
+	out["phone"] = {"c": Vector2(s.x * 0.36, s.y - 0.95 * r), "r": 0.6 * r, "t": "", "col": Color.WHITE, "icon": true}
+
+
 func _add_interact(out: Dictionary, s: Vector2, r: float) -> void:
 	if interact_label != "" or edit_mode:
 		out["interact"] = {"c": Vector2(s.x - 5.4 * r, s.y - 2.6 * r), "r": 0.8 * r, "t": interact_label if interact_label != "" else "INTERAÇÃO", "col": Color(0.4, 0.9, 1.0)}
@@ -73,6 +80,7 @@ func _foot_buttons(s: Vector2, r: float) -> Dictionary:
 		"respawn": {"c": Vector2(s.x - 3.2 * r, 0.8 * r), "r": 0.5 * r, "t": "VOLTAR", "col": Color(0.8, 0.6, 1.0)},
 	}
 	_add_interact(out, s, r)
+	_add_phone(out, s, r)
 	if mount_label != "":
 		out["mount"] = {"c": Vector2(s.x - 3.9 * r, s.y - 1.3 * r), "r": 0.9 * r, "t": mount_label, "col": Color(1.0, 0.75, 0.4)}
 	return out
@@ -90,6 +98,7 @@ func _riding_buttons(s: Vector2, r: float) -> Dictionary:
 		"respawn": {"c": Vector2(s.x - 3.2 * r, 0.8 * r), "r": 0.5 * r, "t": "VOLTAR", "col": Color(0.8, 0.6, 1.0)},
 	}
 	_add_interact(out, s, r)
+	_add_phone(out, s, r)
 	out["mount"] = {"c": Vector2(s.x - 5.6 * r, 0.8 * r), "r": 0.5 * r, "t": "DESCER", "col": Color(1.0, 0.75, 0.4)}
 	return out
 
@@ -132,6 +141,8 @@ func _on_press(idx: int, pos: Vector2) -> void:
 					mount_pressed.emit()
 				"interact":
 					interact_pressed.emit()
+				"phone":
+					phone_pressed.emit()
 			_recompute()
 			return
 	var s := get_viewport_rect().size
@@ -275,6 +286,10 @@ func _draw() -> void:
 		var r: float = b["r"]
 		var col: Color = b["col"]
 		var down := held.has(id) or edit_mode
+		if b.get("icon", false):
+			var tint := Color(1, 1, 1, clampf(ui_opacity + 0.4, 0.0, 1.0) * (0.7 if down else 1.0))
+			draw_texture_rect(_phone_icon, Rect2(c - Vector2(r, r), Vector2(r * 2.0, r * 2.0)), false, tint)
+			continue
 		var fill := col
 		fill.a = ui_opacity * (0.75 if down else 0.3)
 		draw_circle(c, r, fill)

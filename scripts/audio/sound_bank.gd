@@ -93,6 +93,21 @@ static func step() -> AudioStreamWAV:
 	return _stream(out, false)
 
 
+static func shutter() -> AudioStreamWAV:
+	var n := int(RATE * 0.22)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+	for i in n:
+		var t := float(i) / RATE
+		var noise := rng.randf() * 2.0 - 1.0
+		var a := exp(-t * 90.0)
+		var b := exp(-(t - 0.09) * 90.0) if t >= 0.09 else 0.0
+		out[i] = noise * (a + b) * 0.5
+	return _stream(out, false)
+
+
 static func click() -> AudioStreamWAV:
 	var n := int(RATE * 0.07)
 	var out := PackedFloat32Array()

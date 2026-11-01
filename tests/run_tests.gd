@@ -20,6 +20,7 @@ const GraphicsManager := preload("res://scripts/core/graphics_manager.gd")
 const PerformanceGuard := preload("res://scripts/core/performance_guard.gd")
 const Humanoid := preload("res://scripts/player/humanoid.gd")
 const Pedestrian := preload("res://scripts/player/pedestrian.gd")
+const PhoneUi := preload("res://scripts/ui/phone_ui.gd")
 
 var failures: int = 0
 var checks: int = 0
@@ -59,6 +60,7 @@ func _run_all() -> void:
 	await _test_polish()
 	_test_rider_model()
 	await _test_reverse_fall_foot()
+	await _test_phone_ui()
 	await _test_camera_and_main()
 	print("== %d verificações, %d falhas ==" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -87,6 +89,10 @@ func _test_files() -> void:
 		"res://scripts/core/performance_guard.gd",
 		"res://scripts/player/humanoid.gd",
 		"res://scripts/player/pedestrian.gd",
+		"res://scripts/ui/phone_ui.gd",
+		"res://scripts/ui/map_screen.gd",
+		"res://assets/ui/phone.png",
+		"res://assets/ui/phone_button.png",
 		"res://resources/vehicles/corisco.tres",
 		"res://resources/vehicles/trovao.tres",
 	]:
@@ -289,6 +295,45 @@ func _test_camera_and_main() -> void:
 	await _frames(5)
 	check("jogar libera a simulação", m.mode == 1 and not m.get_tree().paused)
 	m.bike.input_brake_rear = 0.0
+	m._open_phone()
+	check("celular: o botão abre o celular e pausa o jogo", m.mode == 4 and m.phone.visible and m.get_tree().paused)
+	for i in 3:
+		m.phone._process(0.2)
+	var evp := InputEventMouseButton.new()
+	evp.button_index = MOUSE_BUTTON_LEFT
+	evp.pressed = true
+	evp.position = m.phone.app_center("configuracoes")
+	m.phone._gui_input(evp)
+	for i in 3:
+		m.phone._process(0.2)
+	check("celular: Configurações abre direto, sem passar pela pausa", m.menu.visible and m.menu._current == "settings" and m.menu.phone_origin and m.mode == 4)
+	m.menu._go_back()
+	check("celular: voltar das configurações retoma o jogo", m.mode == 1 and (not m.menu.visible) and not m.get_tree().paused)
+	m.menu.open("pause")
+	var pause_texts: Array = []
+	for bc in m.menu._box.get_children():
+		if bc is Button:
+			pause_texts.append((bc as Button).text)
+	check("pausa: configurações só existem pelo celular", not pause_texts.has("CONFIGURAÇÕES"))
+	m.menu.close()
+	m._start_playing()
+	m._launch_app("entregas")
+	check("celular: app Entregas abre", m.menu._current == "deliveries" and m.menu.visible)
+	m.menu._go_back()
+	m._launch_app("ligacoes")
+	check("celular: app Ligações abre", m.menu._current == "calls" and m.menu.visible)
+	m.menu._go_back()
+	m._launch_app("corridas")
+	check("celular: app Corridas abre a lista de missões", m.menu._current == "missions" and m.menu.visible)
+	m.menu._go_back()
+	m._launch_app("mapa")
+	check("celular: app Mapa abre o mapa grande", m.map_screen.visible)
+	m.map_screen._close()
+	check("celular: fechar o mapa retoma o jogo", m.mode == 1 and not m.map_screen.visible)
+	var photo_path: String = m._save_photo(Image.create(32, 32, false, Image.FORMAT_RGB8))
+	check("celular: app Câmera salva a foto", photo_path != "" and FileAccess.file_exists(photo_path))
+	if photo_path != "":
+		DirAccess.remove_absolute(photo_path)
 	var garage_pos := Vector3.ZERO
 	var burger_pos := Vector3.ZERO
 	for pp in m.city_info["pois"]:
@@ -310,6 +355,9 @@ func _test_camera_and_main() -> void:
 	var money_before: int = m.state.money
 	m._on_interact_pressed()
 	check("interação: ENTREGA sorteia a missão de entrega", m.missions.is_active() and m.missions.active["type"] == "delivery")
+	m.menu.open_from_phone("deliveries")
+	check("celular: app Entregas mostra a entrega em andamento", m.menu._box.get_child_count() > 6)
+	m.menu.close()
 	await _frames(3)
 	check("interação: com missão ativa o botão da hamburgueria some", m.touch.interact_label == "")
 	var dest_id: String = m.missions.active["to"]
@@ -328,6 +376,11 @@ func _test_camera_and_main() -> void:
 	check("a pé: descer da moto parada", m.on_foot and m.bike.parked and m.ped.visible)
 	await _frames(45)
 	check("a pé: personagem fica livre e perto da moto pode subir", m.ped.state == Pedestrian.State.WALK and m.touch.foot_mode and m.touch.mount_label == "SUBIR")
+	m.state.money = 500
+	m.ped.global_position = m.bike.global_position + Vector3(0, 0.2, -60)
+	await _frames(3)
+	m._on_tow_requested()
+	check("guincho: a pé, traz a moto até o personagem e cobra a taxa", m.state.money == 400 and m.bike.global_position.distance_to(m.ped.global_position) < 4.0 and m.bike.parked and not m.bike.fallen)
 	m._on_mount_pressed()
 	await _frames(50)
 	check("a pé: subir na moto devolve o controle", (not m.on_foot) and (not m.bike.parked) and m.bike.rider_on_bike and not m.ped.visible)
@@ -608,6 +661,15 @@ func _test_touch_wheelie() -> void:
 	touch.interact_label = ""
 	check("controles: sem acionador o botão de interação some", not touch._layout().has("interact"))
 	check("controles na moto: botão DESCER existe", touch._layout()["mount"]["t"] == "DESCER")
+	check("celular: botão só com imagem (sem texto) na moto e a pé", touch._layout()["phone"]["t"] == "" and touch._layout()["phone"]["icon"])
+	touch.foot_mode = true
+	check("celular: botão também existe a pé", touch._layout().has("phone"))
+	touch.foot_mode = false
+	var phone_flag := {"p": false}
+	touch.phone_pressed.connect(func(): phone_flag["p"] = true)
+	touch._on_press(3, touch._layout()["phone"]["c"])
+	touch._on_release(3)
+	check("celular: tocar no botão emite a abertura", phone_flag["p"])
 	touch.queue_free()
 	await _frames(2)
 
@@ -847,4 +909,41 @@ func _test_reverse_fall_foot() -> void:
 	await _frames(160)
 	check("queda: personagem se levanta sozinho", ped.state == Pedestrian.State.WALK)
 	holder.queue_free()
+	await _frames(2)
+
+
+func _test_phone_ui() -> void:
+	var ph := PhoneUi.new()
+	root.add_child(ph)
+	await _frames(2)
+	var events := {"apps": [], "closed": 0}
+	ph.app_pressed.connect(func(a): events["apps"].append(a))
+	ph.closed.connect(func(): events["closed"] += 1)
+	check("celular: começa escondido", not ph.visible)
+	ph.open()
+	check("celular: começa abaixo da borda da tela", ph.phone_rect().position.y >= ph.size.y)
+	for i in 3:
+		ph._process(0.2)
+	var r := ph.phone_rect()
+	check("celular: depois de subir fica todo visível do lado direito", ph.shown >= 1.0 and r.position.x > ph.size.x * 0.5 and r.position.y >= 0.0 and r.end.y <= ph.size.y and r.end.x <= ph.size.x)
+	var xc := ph.close_center()
+	check("celular: o X fica no canto superior direito", xc.x > r.position.x + r.size.x * 0.8 and xc.y < r.position.y + r.size.y * 0.2)
+	for app in PhoneUi.APPS:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = true
+		ev.position = ph.app_center(app)
+		ph._gui_input(ev)
+	var apps: Array = events["apps"]
+	check("celular: cada um dos 6 ícones dispara a sua função", apps.size() == 6 and apps.has("mapa") and apps.has("entregas") and apps.has("corridas") and apps.has("configuracoes") and apps.has("ligacoes") and apps.has("camera"))
+	var xev := InputEventMouseButton.new()
+	xev.button_index = MOUSE_BUTTON_LEFT
+	xev.pressed = true
+	xev.position = xc
+	ph._gui_input(xev)
+	for i in 3:
+		ph._process(0.2)
+	check("celular: tocar no X fecha e o celular desce", events["closed"] == 1 and not ph.visible)
+	check("celular: imagens do celular e do botão carregam", load("res://assets/ui/phone.png") is Texture2D and load("res://assets/ui/phone_button.png") is Texture2D)
+	ph.queue_free()
 	await _frames(2)

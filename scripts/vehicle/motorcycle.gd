@@ -139,6 +139,25 @@ func set_profile(p: VehicleProfile, c: Dictionary) -> void:
 		_build_visuals()
 
 
+## Guincho: coloca a moto em pé no lugar indicado, parada.
+func tow_to(t: Transform3D) -> void:
+	global_transform = t
+	velocity = Vector3.ZERO
+	speed = 0.0
+	pitch = 0.0
+	pitch_vel = 0.0
+	stoppie = 0.0
+	stoppie_vel = 0.0
+	lean = 0.0
+	fallen = false
+	being_lifted = false
+	reversing = false
+	_reverse_ok = false
+	burnout = false
+	drifting = false
+	move_yaw = rotation.y
+
+
 func set_rider_visible(on: bool) -> void:
 	rider_on_bike = on
 	if _rider != null:

@@ -21,8 +21,10 @@ const DayNight := preload("res://scripts/city/day_night.gd")
 const GraphicsManager := preload("res://scripts/core/graphics_manager.gd")
 const PerformanceGuard := preload("res://scripts/core/performance_guard.gd")
 const Pedestrian := preload("res://scripts/player/pedestrian.gd")
+const PhoneUi := preload("res://scripts/ui/phone_ui.gd")
+const MapScreen := preload("res://scripts/ui/map_screen.gd")
 
-enum Mode { MENU, PLAYING, PAUSED, GARAGE }
+enum Mode { MENU, PLAYING, PAUSED, GARAGE, PHONE }
 
 const TRIGGER_RADIUS := 4.5   # distância ao acionador para o botão de interação aparecer
 
@@ -40,6 +42,8 @@ var gfx: GraphicsManager
 var guard: PerformanceGuard
 var ped: Pedestrian
 var on_foot: bool = false
+var phone: PhoneUi
+var map_screen: MapScreen
 var state: GameState
 var city_info: Dictionary = {}
 var settings  # autoload GameSettings (ou instância local se não existir)
@@ -49,6 +53,8 @@ var _return_mode: int = Mode.MENU
 var _garage_pos: Vector3 = Vector3.ZERO
 var _edit_bar: VBoxContainer
 var _interaction: Dictionary = {}
+var _pending_app: String = ""
+var _edit_from_phone: bool = false
 
 
 func _ready() -> void:
@@ -156,6 +162,16 @@ func _ready() -> void:
 	garage.bike = bike
 	menus.add_child(garage)
 	_build_edit_bar(menus)
+	map_screen = MapScreen.new()
+	menus.add_child(map_screen)
+	map_screen.setup(bike, city_info, traffic, missions)
+	var phone_layer := CanvasLayer.new()
+	phone_layer.layer = 15
+	phone_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(phone_layer)
+	phone = PhoneUi.new()
+	phone_layer.add_child(phone)
+	menu.player_node = bike
 
 	touch.camera_drag.connect(cam.orbit)
 	touch.camera_zoom.connect(cam.zoom)
@@ -164,6 +180,12 @@ func _ready() -> void:
 	touch.respawn_pressed.connect(_on_respawn_pressed)
 	touch.mount_pressed.connect(_on_mount_pressed)
 	touch.interact_pressed.connect(_on_interact_pressed)
+	touch.phone_pressed.connect(_open_phone)
+	phone.app_pressed.connect(_on_phone_app)
+	phone.closed.connect(_on_phone_closed)
+	map_screen.closed.connect(_start_playing)
+	menu.map_requested.connect(_open_map_from_menu)
+	menu.tow_requested.connect(_on_tow_requested)
 	ped.stepped.connect(audio.play_step)
 	ped.mount_finished.connect(_finish_mount)
 	ped.lift_finished.connect(_finish_lift)
@@ -263,6 +285,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				_toggle_view()
 			KEY_ESCAPE:
 				_pause()
+			KEY_P:
+				if mode == Mode.PHONE:
+					phone.close()
+				else:
+					_open_phone()
 
 
 # ------------------------------------------------------------- fluxo de telas
@@ -276,6 +303,8 @@ func _touch_enabled(on: bool) -> void:
 
 
 func _enter_menu() -> void:
+	phone.hide_now()
+	map_screen.close()
 	mode = Mode.MENU
 	get_tree().paused = true
 	cam.showroom = true
@@ -286,6 +315,8 @@ func _enter_menu() -> void:
 
 
 func _start_playing() -> void:
+	phone.hide_now()
+	map_screen.close()
 	mode = Mode.PLAYING
 	get_tree().paused = false
 	cam.showroom = false
@@ -353,6 +384,124 @@ func _close_garage() -> void:
 		cam.showroom = false
 		cam.snap()
 		menu.open("pause")
+
+
+# ------------------------------------------------------------------- celular
+
+func _open_phone() -> void:
+	if mode != Mode.PLAYING:
+		return
+	mode = Mode.PHONE
+	_pending_app = ""
+	get_tree().paused = true
+	_touch_enabled(false)
+	phone.open()
+
+
+func _on_phone_app(app: String) -> void:
+	_pending_app = app
+	phone.close()
+
+
+func _on_phone_closed() -> void:
+	var app := _pending_app
+	_pending_app = ""
+	if app == "":
+		_start_playing()
+	else:
+		_launch_app(app)
+
+
+## Cada ícone do celular abre uma função (sem passar pelo menu de pausa).
+func _launch_app(app: String) -> void:
+	menu.in_game = true
+	match app:
+		"mapa":
+			map_screen.open()
+		"entregas":
+			menu.open_from_phone("deliveries")
+		"corridas":
+			menu.open_from_phone("missions")
+		"ligacoes":
+			menu.open_from_phone("calls")
+		"configuracoes":
+			menu.open_from_phone("settings")
+		"camera":
+			_take_photo()
+		_:
+			_start_playing()
+
+
+func _open_map_from_menu() -> void:
+	menu.close()
+	map_screen.open()
+
+
+## Guincho: traz a moto até o personagem a pé (cobra uma taxa).
+func _on_tow_requested() -> void:
+	if not on_foot:
+		menu.set_status("Você já está pilotando a moto.")
+		return
+	if ped.global_position.distance_to(bike.global_position) < 10.0:
+		menu.set_status("Sua moto já está por perto.")
+		return
+	if not state.spend(MenuUi.TOW_COST):
+		menu.set_status("Dinheiro insuficiente para o guincho.")
+		return
+	state.save_game()
+	var place := ped.global_position + ped.global_transform.basis * Vector3(1.6, 0.1, -0.6)
+	bike.tow_to(Transform3D(Basis(Vector3.UP, ped.rotation.y), place))
+	bike.parked = true
+	bike.set_rider_visible(false)
+	_start_playing()
+	hud.show_message("Guincho entregou sua moto  -" + GameState.format_money(MenuUi.TOW_COST))
+
+
+## Câmera do celular: esconde a interface, captura a tela e salva a foto.
+func _take_photo() -> void:
+	hud.visible = false
+	touch.visible = false
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var img := get_viewport().get_texture().get_image()
+	hud.visible = true
+	var path := ""
+	if img != null:
+		path = _save_photo(img)
+	audio.play_shutter()
+	_start_playing()
+	_flash()
+	hud.show_message(("Foto salva em: " + path) if path != "" else "Não foi possível salvar a foto")
+
+
+## Tenta a pasta de Imagens do aparelho; se não puder, usa a pasta privada do jogo.
+func _save_photo(img: Image) -> String:
+	var stamp := Time.get_datetime_string_from_system().replace(":", "").replace("-", "").replace("T", "_")
+	var dirs: Array = []
+	var pictures := OS.get_system_dir(OS.SYSTEM_DIR_PICTURES)
+	if pictures != "":
+		dirs.append(pictures.path_join("GCMotoGrau"))
+	dirs.append("user://fotos")
+	for d in dirs:
+		DirAccess.make_dir_recursive_absolute(d)
+		var file: String = str(d).path_join("foto_%s.png" % stamp)
+		if img.save_png(file) == OK:
+			return file
+	return ""
+
+
+func _flash() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 40
+	add_child(layer)
+	var rect := ColorRect.new()
+	rect.color = Color(1, 1, 1, 0.85)
+	rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(rect)
+	var tw := create_tween()
+	tw.tween_property(rect, "color:a", 0.0, 0.45)
+	tw.tween_callback(layer.queue_free)
 
 
 # ------------------------------------------------ botão de interação (acionadores)
@@ -472,6 +621,8 @@ func _set_player(node: Node3D) -> void:
 	missions.tracker = node
 	hud.set_tracking(node)
 	day.set_focus(node)
+	menu.player_node = node
+	map_screen.set_tracking(node)
 
 
 func _begin_lift() -> void:
@@ -543,6 +694,7 @@ func _build_edit_bar(parent: Node) -> void:
 
 
 func _enter_edit_controls() -> void:
+	_edit_from_phone = menu.phone_origin
 	menu.close()
 	_touch_enabled(true)
 	touch.edit_mode = true
@@ -555,7 +707,10 @@ func _finish_edit_controls() -> void:
 	_touch_enabled(false)
 	settings.control_offsets = touch.offsets.duplicate()
 	settings.save_settings()
-	menu.open("settings")
+	if _edit_from_phone:
+		menu.open_from_phone("settings")
+	else:
+		menu.open("settings")
 
 
 func _on_layout_changed() -> void:

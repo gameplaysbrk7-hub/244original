@@ -15,14 +15,19 @@ signal mission_start_requested(id: String)
 signal mission_cancel_requested
 signal settings_changed
 signal edit_controls_requested
+signal map_requested
+signal tow_requested
 
 const PER_PAGE := 4
+const TOW_COST := 100
 const GOLD := Color(1.0, 0.85, 0.3)
 
 var state: Node
 var missions: Node
 var settings: Node
 var in_game: bool = false
+var phone_origin: bool = false    # aberto pelo celular: ao voltar, retoma o jogo direto
+var player_node: Node3D
 
 var _box: VBoxContainer
 var _current: String = "title"
@@ -60,7 +65,22 @@ func open(panel_name: String) -> void:
 	_rebuild()
 
 
+func open_from_phone(panel_name: String) -> void:
+	phone_origin = true
+	open(panel_name)
+
+
+func _go_back() -> void:
+	if phone_origin:
+		phone_origin = false
+		close()
+		resume_pressed.emit()
+	else:
+		open("pause" if in_game else "title")
+
+
 func close() -> void:
+	phone_origin = false
 	visible = false
 
 
@@ -83,6 +103,10 @@ func _rebuild() -> void:
 			_build_missions()
 		"settings":
 			_build_settings()
+		"deliveries":
+			_build_deliveries()
+		"calls":
+			_build_calls()
 	if _status != "":
 		Kit.label(_box, _status, 24, Color(1.0, 0.6, 0.5))
 		_status = ""
@@ -104,7 +128,6 @@ func _build_pause() -> void:
 	Kit.button(_box, "CONTINUAR", func(): resume_pressed.emit(), Color(0.15, 0.45, 0.25))
 	Kit.button(_box, "MISSÕES", func(): open("missions"))
 	Kit.button(_box, "GARAGEM", func(): garage_pressed.emit())
-	Kit.button(_box, "CONFIGURAÇÕES", func(): open("settings"))
 	Kit.button(_box, "REINICIAR", func(): restart_pressed.emit())
 	Kit.button(_box, "MENU INICIAL", func(): to_title_pressed.emit(), Color(0.4, 0.15, 0.15))
 
@@ -135,7 +158,7 @@ func _build_missions() -> void:
 	Kit.label(nav, "%d / %d" % [_page + 1, pages], 26)
 	var nxt := Kit.button(nav, ">", _change_page.bind(1), Color(0.2, 0.2, 0.28), Vector2(120, 60), 32)
 	nxt.disabled = _page >= pages - 1
-	Kit.button(_box, "VOLTAR", func(): open("pause"), Color(0.25, 0.25, 0.3), Vector2(460, 64), 30)
+	Kit.button(_box, "VOLTAR", _go_back, Color(0.25, 0.25, 0.3), Vector2(460, 64), 30)
 
 
 func _build_settings() -> void:
@@ -161,7 +184,52 @@ func _build_settings() -> void:
 			_slider("traffic", 0.0, 30.0, 1.0, float(settings.traffic_density))
 			_slider("day", 0.0, 30.0, 1.0, settings.day_minutes)
 	Kit.label(_box, "GC Moto Grau v1.0 - projeto original, sem arquivos de terceiros", 18, Color(0.6, 0.62, 0.7))
-	Kit.button(_box, "VOLTAR", func(): open("pause" if in_game else "title"), Color(0.25, 0.25, 0.3), Vector2(460, 60), 28)
+	Kit.button(_box, "VOLTAR", _go_back, Color(0.25, 0.25, 0.3), Vector2(460, 60), 28)
+
+
+func _build_deliveries() -> void:
+	Kit.label(_box, "ENTREGAS", 46, GOLD)
+	var done := 0
+	for k in state.completed:
+		if str(k).begins_with("entrega_"):
+			done += int(state.completed[k])
+	Kit.label(_box, "Entregas concluídas: %d" % done, 24, Color(0.8, 0.85, 0.9))
+	var me: Vector3 = player_node.global_position if player_node != null else Vector3.ZERO
+	if missions.is_active() and str(missions.active.get("type", "")) == "delivery":
+		var m: Dictionary = missions.active
+		var target: Vector3 = missions.objective_pos()
+		var d := Vector2(target.x - me.x, target.z - me.z)
+		Kit.label(_box, str(m["title"]), 32, Color(0.6, 1.0, 0.8))
+		Kit.label(_box, "De %s para %s" % [missions.poi_names.get(m["from"], m["from"]), missions.poi_names.get(m["to"], m["to"])], 24)
+		Kit.label(_box, "Distância: %d m   Direção: %s" % [int(d.length()), _compass(d)], 26)
+		Kit.label(_box, "Tempo: %d:%02d   Recompensa: %s" % [int(missions.time_left) / 60, int(missions.time_left) % 60, GameState.format_money(int(m["reward"]))], 24, GOLD)
+		Kit.label(_box, "Chegue ao marcador amarelo e toque em ENTREGAR", 22, Color(1.0, 0.8, 0.4))
+	else:
+		Kit.label(_box, "Nenhuma entrega em andamento.", 28)
+		Kit.label(_box, "Pare em uma HAMBURGUERIA e toque em ENTREGA.", 24, Color(1.0, 0.8, 0.4))
+		var near: Array = []
+		for id in missions.poi_positions:
+			if str(id).begins_with("hamburgueria_"):
+				var p: Vector3 = missions.poi_positions[id]
+				near.append([Vector2(p.x - me.x, p.z - me.z).length(), str(missions.poi_names.get(id, id))])
+		near.sort_custom(func(a, b): return a[0] < b[0])
+		for e in near:
+			Kit.label(_box, "%s  -  %d m" % [e[1], int(e[0])], 22, Color(0.85, 0.9, 0.95))
+	Kit.button(_box, "ABRIR MAPA", func(): map_requested.emit(), Color(0.2, 0.35, 0.5), Vector2(460, 60), 28)
+	Kit.button(_box, "VOLTAR", _go_back, Color(0.25, 0.25, 0.3), Vector2(460, 60), 28)
+
+
+func _compass(d: Vector2) -> String:
+	var deg := fposmod(rad_to_deg(atan2(d.x, -d.y)), 360.0)
+	var names := ["Norte", "Nordeste", "Leste", "Sudeste", "Sul", "Sudoeste", "Oeste", "Noroeste"]
+	return names[int(round(deg / 45.0)) % 8]
+
+
+func _build_calls() -> void:
+	Kit.label(_box, "LIGAÇÕES", 46, GOLD)
+	Kit.label(_box, GameState.format_money(state.money), 28, GOLD)
+	Kit.button(_box, "GUINCHO  -  %s\nTraz sua moto até você (só a pé)" % GameState.format_money(TOW_COST), func(): tow_requested.emit(), Color(0.5, 0.32, 0.12), Vector2(560, 90), 24)
+	Kit.button(_box, "VOLTAR", _go_back, Color(0.25, 0.25, 0.3), Vector2(460, 60), 28)
 
 
 func _set_stab(t: String) -> void:
