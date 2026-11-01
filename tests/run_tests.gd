@@ -289,6 +289,41 @@ func _test_camera_and_main() -> void:
 	await _frames(5)
 	check("jogar libera a simulação", m.mode == 1 and not m.get_tree().paused)
 	m.bike.input_brake_rear = 0.0
+	var garage_pos := Vector3.ZERO
+	var burger_pos := Vector3.ZERO
+	for pp in m.city_info["pois"]:
+		if pp["id"] == "garagem":
+			garage_pos = pp["pos"]
+		if pp["id"] == "hamburgueria_1":
+			burger_pos = pp["pos"]
+	m.bike.global_position = garage_pos + Vector3(0, 0.3, 0)
+	await _frames(5)
+	check("interação: parado na garagem o botão vira GARAGEM", m.touch.interact_label == "GARAGEM")
+	m._on_interact_pressed()
+	check("interação: o botão abre a garagem sem passar pela pausa", m.mode == 3 and m.garage.visible)
+	m.garage._on_back()
+	await _frames(3)
+	check("interação: sair da garagem volta direto ao jogo", m.mode == 1 and not m.get_tree().paused)
+	m.bike.global_position = burger_pos + Vector3(0, 0.3, 0)
+	await _frames(5)
+	check("interação: parado na hamburgueria o botão vira ENTREGA", m.touch.interact_label == "ENTREGA")
+	var money_before: int = m.state.money
+	m._on_interact_pressed()
+	check("interação: ENTREGA sorteia a missão de entrega", m.missions.is_active() and m.missions.active["type"] == "delivery")
+	await _frames(3)
+	check("interação: com missão ativa o botão da hamburgueria some", m.touch.interact_label == "")
+	var dest_id: String = m.missions.active["to"]
+	var dest_at := Vector3.ZERO
+	for pp in m.city_info["pois"]:
+		if pp["id"] == dest_id:
+			dest_at = pp["pos"]
+	m.bike.global_position = dest_at + Vector3(0, 0.3, 0)
+	await _frames(8)
+	check("interação: chegar na casa não entrega sozinho; o botão vira ENTREGAR", m.missions.is_active() and m.touch.interact_label == "ENTREGAR")
+	m._on_interact_pressed()
+	check("interação: ENTREGAR conclui a entrega e paga", (not m.missions.is_active()) and m.state.money > money_before)
+	m.bike.global_position = m.city_info["spawn"] + Vector3(0, 0.3, 0)
+	await _frames(5)
 	m._dismount()
 	check("a pé: descer da moto parada", m.on_foot and m.bike.parked and m.ped.visible)
 	await _frames(45)
@@ -468,51 +503,58 @@ func _test_missions() -> void:
 	st.money = 0
 	var pois := [
 		{"id": "hamburgueria_1", "name": "HAMBURGUERIA 1", "pos": Vector3(18, 0, 30)},
-		{"id": "casa_1", "name": "CASA 1", "pos": Vector3(-12, 0, 36)},
+		{"id": "casa_1", "name": "CASA 1", "pos": Vector3(-60, 0, 40)},
+		{"id": "casa_2", "name": "CASA 2", "pos": Vector3(70, 0, -40)},
+		{"id": "casa_3", "name": "CASA 3", "pos": Vector3(0, 0, -90)},
 	]
 	var mm := MissionManager.new()
 	holder.add_child(mm)
 	mm.setup(st, bike, pois)
 
-	check("missão: inicia entrega", mm.start("entrega_1") and mm.is_active())
-	check("missão: não inicia duas ao mesmo tempo", not mm.start("grau_5"))
-	bike.global_position = Vector3(18, 0.3, 30)
+	mm.rng.seed = 7
+	check("entrega: hamburgueria sorteia uma entrega", mm.start_delivery("hamburgueria_1") and mm.is_active() and mm.active["type"] == "delivery")
+	var dest: String = mm.active["to"]
+	var dest_pos: Vector3 = mm.objective_pos()
+	var first_reward := int(mm.active["reward"])
+	check("entrega: destino é uma casa a mais de 50 m", dest.begins_with("casa_") and Vector2(dest_pos.x - 18.0, dest_pos.z - 30.0).length() >= 50.0 and first_reward >= 100)
+	check("entrega: não inicia duas missões ao mesmo tempo", (not mm.start("grau_5")) and (not mm.start_delivery("hamburgueria_1")))
+	check("entrega: o pedido já fica na moto", mm.stage == 1)
+	bike.global_position = dest_pos + Vector3(0, 0.3, 0)
 	mm._physics_process(0.01)
-	check("missão: coleta o pedido na hamburgueria e passa a carregar", mm.stage == 1)
-	bike.global_position = Vector3(-12, 0.3, 36)
-	mm._physics_process(0.01)
-	check("missão: entrega na casa paga a recompensa", (not mm.is_active()) and st.money == 300)
-	mm._physics_process(0.01)
-	check("missão: sem pagamento duplicado", st.money == 300)
-	mm.start("entrega_1")
-	bike.global_position = Vector3(18, 0.3, 30)
-	mm._physics_process(0.01)
-	bike.global_position = Vector3(-12, 0.3, 36)
-	mm._physics_process(0.01)
-	check("missão: repetição paga 40%", st.money == 420 and int(st.completed["entrega_1"]) == 2)
+	check("entrega: chegar ao destino NÃO conclui sozinho", mm.is_active() and st.money == 0)
+	check("entrega: não entrega longe do destino", not mm.deliver(Vector3(0, 0, 0)))
+	check("entrega: botão ENTREGAR no destino conclui e paga", mm.can_deliver_at(dest) and mm.deliver(dest_pos) and (not mm.is_active()) and st.money == first_reward)
+	check("entrega: sem pagamento duplicado", (not mm.deliver(dest_pos)) and st.money == first_reward)
+	var expected := first_reward
+	mm.start_delivery("hamburgueria_1", dest)
+	mm.deliver(dest_pos)
+	expected += int(round(first_reward * 0.4))
+	check("entrega: repetir o mesmo trajeto paga 40%", st.money == expected)
 
 	var fails := {"n": 0}
 	mm.failed.connect(func(_m, _r): fails["n"] += 1)
-	mm.start("entrega_4")
-	for i in 200:
+	mm.start_delivery("hamburgueria_1", dest)
+	for i in 400:
 		mm._physics_process(1.0)
-	check("missão: falha por tempo sem pagar", fails["n"] == 1 and (not mm.is_active()) and st.money == 420)
+	check("entrega: falha por tempo sem pagar", fails["n"] == 1 and (not mm.is_active()) and st.money == expected)
 
 	mm.start("grau_5")
 	bike.wheelie_time = 5.5
 	mm._physics_process(0.01)
-	check("missão: desafio de grau", (not mm.is_active()) and st.money == 770)
+	expected += 350
+	check("missão: desafio de grau", (not mm.is_active()) and st.money == expected)
 
 	mm.start("percurso_centro")
 	var pts: Array = mm.active["points"].duplicate()
 	for p in pts:
 		bike.global_position = p + Vector3(0, 0.3, 0)
 		mm._physics_process(0.01)
-	check("missão: percurso com checkpoints em ordem", (not mm.is_active()) and st.money == 1370)
+	expected += 600
+	check("missão: percurso com checkpoints em ordem", (not mm.is_active()) and st.money == expected)
 
 	mm.start("grau_10")
 	mm.cancel()
-	check("missão: cancelar não paga", (not mm.is_active()) and st.money == 1370)
+	check("missão: cancelar não paga", (not mm.is_active()) and st.money == expected)
 
 	holder.queue_free()
 	await _frames(2)
@@ -557,7 +599,14 @@ func _test_touch_wheelie() -> void:
 	touch._on_drag(0, Vector2(150, 700), Vector2(0, 200))
 	check("controles a pé: analógico vira movimento e não liga o grau", touch.stick_vec.y > 0.5 and not touch.wheelie)
 	touch._on_release(0)
+	touch.interact_label = "GARAGEM"
+	check("controles a pé: botão de interação aparece com nome variável", touch._layout().has("interact") and touch._layout()["interact"]["t"] == "GARAGEM")
 	touch.foot_mode = false
+	check("controles: EQUIL foi substituído pelo botão de interação", not touch._layout().has("balance") and touch._layout()["interact"]["t"] == "GARAGEM")
+	touch.interact_label = "ENTREGAR"
+	check("controles: nome do botão muda (ENTREGAR)", touch._layout()["interact"]["t"] == "ENTREGAR")
+	touch.interact_label = ""
+	check("controles: sem acionador o botão de interação some", not touch._layout().has("interact"))
 	check("controles na moto: botão DESCER existe", touch._layout()["mount"]["t"] == "DESCER")
 	touch.queue_free()
 	await _frames(2)

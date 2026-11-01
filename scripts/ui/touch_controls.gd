@@ -11,6 +11,7 @@ signal pause_pressed
 signal view_toggle_pressed
 signal layout_changed
 signal mount_pressed
+signal interact_pressed
 
 var steer: float = 0.0
 var throttle: float = 0.0
@@ -24,6 +25,7 @@ var offsets: Dictionary = {}     # id do botão -> Vector2 (fração da tela)
 var edit_mode: bool = false
 var foot_mode: bool = false     # a pé: mostra CORRER e SUBIR/LEVANTAR e esconde os botões da moto
 var mount_label: String = "DESCER"
+var interact_label: String = ""   # nome variável do botão de interação (vazio = botão escondido)
 var run: bool = false
 var stick_vec: Vector2 = Vector2.ZERO   # vetor do analógico (x direita, y para trás)
 var steer_sensitivity: float = 1.0
@@ -58,6 +60,11 @@ func _layout() -> Dictionary:
 	return out
 
 
+func _add_interact(out: Dictionary, s: Vector2, r: float) -> void:
+	if interact_label != "" or edit_mode:
+		out["interact"] = {"c": Vector2(s.x - 5.4 * r, s.y - 2.6 * r), "r": 0.8 * r, "t": interact_label if interact_label != "" else "INTERAÇÃO", "col": Color(0.4, 0.9, 1.0)}
+
+
 func _foot_buttons(s: Vector2, r: float) -> Dictionary:
 	var out := {
 		"run": {"c": Vector2(s.x - 1.7 * r, s.y - 1.7 * r), "r": 1.2 * r, "t": "CORRER", "col": Color(0.3, 1.0, 0.45)},
@@ -65,6 +72,7 @@ func _foot_buttons(s: Vector2, r: float) -> Dictionary:
 		"camera_reset": {"c": Vector2(s.x - 2.0 * r, 0.8 * r), "r": 0.5 * r, "t": "CÂM", "col": Color(0.5, 0.8, 1.0)},
 		"respawn": {"c": Vector2(s.x - 3.2 * r, 0.8 * r), "r": 0.5 * r, "t": "VOLTAR", "col": Color(0.8, 0.6, 1.0)},
 	}
+	_add_interact(out, s, r)
 	if mount_label != "":
 		out["mount"] = {"c": Vector2(s.x - 3.9 * r, s.y - 1.3 * r), "r": 0.9 * r, "t": mount_label, "col": Color(1.0, 0.75, 0.4)}
 	return out
@@ -75,13 +83,13 @@ func _riding_buttons(s: Vector2, r: float) -> Dictionary:
 		"throttle": {"c": Vector2(s.x - 1.7 * r, s.y - 1.7 * r), "r": 1.3 * r, "t": "ACEL", "col": Color(0.3, 1.0, 0.45)},
 		"brake_front": {"c": Vector2(s.x - 4.0 * r, s.y - 1.2 * r), "r": 0.8 * r, "t": "F.DIANT", "col": Color(1.0, 0.4, 0.35)},
 		"brake_rear": {"c": Vector2(s.x - 3.6 * r, s.y - 3.0 * r), "r": 0.8 * r, "t": "F.TRAS", "col": Color(1.0, 0.55, 0.3)},
-		"balance": {"c": Vector2(s.x - 5.4 * r, s.y - 2.6 * r), "r": 0.75 * r, "t": "EQUIL", "col": Color(0.4, 0.9, 1.0)},
 		"drift": {"c": Vector2(s.x - 6.6 * r, s.y - 0.9 * r), "r": 0.7 * r, "t": "DERRAP", "col": Color(0.9, 0.9, 0.5)},
 		"view": {"c": Vector2(s.x - 4.4 * r, 0.8 * r), "r": 0.5 * r, "t": "VISÃO", "col": Color(0.6, 1.0, 0.8)},
 		"pause": {"c": Vector2(s.x - 0.8 * r, 0.8 * r), "r": 0.5 * r, "t": "PAUSA", "col": Color.WHITE},
 		"camera_reset": {"c": Vector2(s.x - 2.0 * r, 0.8 * r), "r": 0.5 * r, "t": "CÂM", "col": Color(0.5, 0.8, 1.0)},
 		"respawn": {"c": Vector2(s.x - 3.2 * r, 0.8 * r), "r": 0.5 * r, "t": "VOLTAR", "col": Color(0.8, 0.6, 1.0)},
 	}
+	_add_interact(out, s, r)
 	out["mount"] = {"c": Vector2(s.x - 5.6 * r, 0.8 * r), "r": 0.5 * r, "t": "DESCER", "col": Color(1.0, 0.75, 0.4)}
 	return out
 
@@ -122,6 +130,8 @@ func _on_press(idx: int, pos: Vector2) -> void:
 					view_toggle_pressed.emit()
 				"mount":
 					mount_pressed.emit()
+				"interact":
+					interact_pressed.emit()
 			_recompute()
 			return
 	var s := get_viewport_rect().size

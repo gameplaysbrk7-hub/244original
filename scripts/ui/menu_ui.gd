@@ -114,6 +114,7 @@ func _build_missions() -> void:
 	var pages := maxi(1, int(ceil(list.size() / float(PER_PAGE))))
 	_page = clampi(_page, 0, pages - 1)
 	Kit.label(_box, "MISSÕES   " + GameState.format_money(state.money), 40, GOLD)
+	Kit.label(_box, "Entregas: pare em uma HAMBURGUERIA (H no minimapa) e toque em ENTREGA", 22, Color(1.0, 0.8, 0.4))
 	var busy: bool = missions.is_active()
 	if busy:
 		Kit.label(_box, "Em andamento: " + str(missions.active.get("title", "")), 26, Color(0.6, 1.0, 0.8))

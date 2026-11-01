@@ -16,6 +16,7 @@ const CHECKPOINT_RADIUS := 7.0
 
 var state: Node
 var bike: Node3D
+var rng := RandomNumberGenerator.new()
 var tracker: Node3D   # quem é medido nos objetivos (moto ou personagem a pé)
 var poi_positions: Dictionary = {}
 var poi_names: Dictionary = {}
@@ -27,6 +28,10 @@ var _finished: bool = true
 var _run_counter: int = 0
 var _run_id: String = ""
 var _marker: MeshInstance3D
+
+
+func _ready() -> void:
+	rng.randomize()
 
 
 func setup(game_state: Node, bike_node: Node3D, pois: Array) -> void:
@@ -76,6 +81,64 @@ func start(id: String) -> bool:
 	return true
 
 
+## Inicia uma entrega sorteada a partir de uma hamburgueria (ou para um destino específico).
+func start_delivery(from_id: String, to_id: String = "") -> bool:
+	if not _finished or not poi_positions.has(from_id):
+		return false
+	var dest := to_id
+	if dest == "":
+		dest = _random_house(from_id)
+	if dest == "" or not poi_positions.has(dest):
+		return false
+	var a: Vector3 = poi_positions[from_id]
+	var b: Vector3 = poi_positions[dest]
+	var dist := Vector2(a.x - b.x, a.z - b.z).length()
+	active = Catalog.make_delivery(from_id, dest, str(poi_names.get(from_id, from_id)), str(poi_names.get(dest, dest)), dist)
+	stage = 1
+	time_left = float(active["time"])
+	_run_counter += 1
+	_run_id = "%s#%d" % [active["id"], _run_counter]
+	_finished = false
+	_update_marker()
+	carrying_changed.emit(true)
+	started.emit(active.duplicate(true))
+	return true
+
+
+func _random_house(from_id: String) -> String:
+	var origin: Vector3 = poi_positions[from_id]
+	var far: Array = []
+	var any: Array = []
+	for id in poi_positions:
+		if str(id).begins_with("casa_"):
+			any.append(id)
+			var p: Vector3 = poi_positions[id]
+			if Vector2(p.x - origin.x, p.z - origin.z).length() >= 50.0:
+				far.append(id)
+	var pool: Array = far if not far.is_empty() else any
+	if pool.is_empty():
+		return ""
+	return str(pool[rng.randi() % pool.size()])
+
+
+## A entrega só acontece quando o jogador toca em ENTREGAR perto do destino (nada automático).
+func can_deliver(pos: Vector3) -> bool:
+	if _finished or active.get("type", "") != "delivery":
+		return false
+	return _flat_distance(pos, objective_pos()) < DELIVERY_RADIUS
+
+
+func can_deliver_at(id: String) -> bool:
+	return (not _finished) and active.get("type", "") == "delivery" and active.get("to", "") == id
+
+
+func deliver(pos: Vector3) -> bool:
+	if not can_deliver(pos):
+		return false
+	_complete()
+	return true
+
+
 func cancel() -> void:
 	if _finished:
 		return
@@ -106,7 +169,7 @@ func objective_text() -> String:
 		"delivery":
 			var target_id: String = active["from"] if stage == 0 else active["to"]
 			var verb := "Pegue a encomenda em" if stage == 0 else "Entregue em"
-			return "%s %s  (%s)" % [verb, poi_names.get(target_id, target_id), t]
+			return "%s %s e toque em ENTREGAR  (%s)" % [verb, poi_names.get(target_id, target_id), t]
 		"wheelie":
 			return "Grau: %.1f / %.0f s  (%s)" % [float(bike.wheelie_time), float(active["target"]), t]
 		"checkpoints":
@@ -123,12 +186,7 @@ func _physics_process(delta: float) -> void:
 		return
 	match active["type"]:
 		"delivery":
-			if _flat_distance(_tracked_pos(), objective_pos()) < DELIVERY_RADIUS:
-				stage += 1
-				if stage >= 2:
-					_complete()
-				else:
-					carrying_changed.emit(true)
+			pass   # a entrega é feita pelo botão de interação (deliver)
 		"wheelie":
 			if float(bike.wheelie_time) >= float(active["target"]):
 				_complete()

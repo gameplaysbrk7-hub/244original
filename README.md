@@ -28,14 +28,15 @@ tudo é gerado proceduralmente.
 
 ### Ajustes recentes
 - **Trânsito corrigido:** os carros agora circulam pelas ruas (mão direita, semáforos, curvas nos cruzamentos). A detecção de obstáculos passou a ser por geometria simples (sem consultas de física) e carros parados sem motivo por mais de 10 s são reposicionados
-- **Entregas:** o pedido é retirado numa das 3 **HAMBURGUERIAS** (prédio com letreiro, toldo vermelho e hambúrguer gigante no telhado, marcador **H** no minimapa) e entregue numa das 8 **casas** marcadas (**CASA 1 a 8**, marcador **C**). Durante a entrega a moto leva uma bolsa vermelha
+- **Botão de interação (substitui o EQUIL):** aparece só quando você está **parado sobre um acionador** (marcador no chão) e muda de nome: **GARAGEM** (na garagem, abre a garagem direto, sem passar pela pausa), **ENTREGA** (numa HAMBURGUERIA, sorteia uma entrega) e **ENTREGAR** (na casa de destino, conclui a entrega). Nada é automático: chegar na casa não entrega sozinho, é preciso tocar em ENTREGAR
+- **Entregas sorteadas:** em cada **HAMBURGUERIA** (prédio com letreiro, toldo vermelho e hambúrguer gigante no telhado, marcador **H** no minimapa) o botão ENTREGA sorteia uma das **casas** (CASA 1 a 8, marcador **C**, a pelo menos 50 m). Tempo e recompensa dependem da distância; repetir o mesmo trajeto paga 40%. A moto leva uma bolsa vermelha durante a entrega; funciona também a pé
 - **Motos redesenhadas** (veja a garagem abaixo) e **grau pelo analógico** (sem botão GRAU)
 
 ### Novidades da Fase 4
 - **Tela inicial, menu de pausa, missões e configurações** totalmente por toque (JOGAR, GARAGEM, MISSÕES, sensibilidade, opacidade dos controles, densidade do trânsito)
 - **Garagem** com visualização 3D giratória (arraste para girar): 3 motos originais (**GC 125** clássica de meados de 2009, com farol redondo, garfo com sanfonas, amortecedores duplos e freio a tambor; **GC 160** utilitária moderna, com farol de LED, carenagens angulares, painel digital e rodas de liga; **TORRADO 300** trail alta, com bico, garfo invertido dourado, guidão alto com protetores e pneus de trilha), compra, pintura de carenagem/quadro/rodas, rodas esportivas, baú, escape esportivo, retrovisores, adesivos (listras, número 77) e 3 níveis de suspensão (afetam direção e inclinação). Tudo aparece no modelo 3D real; cores usam materiais compartilhados (nada de duplicar modelos)
 - **Dinheiro e loja**: saldo no HUD, compra de motos e peças, saldo inicial R$ 500
-- **8 missões**: 4 entregas (pegar e entregar com tempo), 2 desafios de grau (5 s e 10 s) e 2 percursos com checkpoints. Marcador 3D e no minimapa. Falha por tempo. Recompensa paga **uma vez por execução**; repetir a mesma missão paga 40%
+- **Missões**: entregas sorteadas nas hamburguerias (botão ENTREGA) e, pelo menu Pausa → Missões, 2 desafios de grau (5 s e 10 s) e 2 percursos com checkpoints. Marcador 3D e no minimapa. Falha por tempo. Recompensa paga **uma vez por execução**; repetir a mesma missão paga 40%
 - **Salvamento** em `user://save.json` com checksum, gravação atômica e backup `.bak`: arquivo corrompido ou ausente nunca derruba o jogo. Missão em andamento não é salva, então carregar não repete recompensa
 - Para entrar na garagem durante o jogo, vá até o marcador **G** (a menos de 28 m) e use Pausa → Garagem
 
@@ -50,9 +51,9 @@ tudo é gerado proceduralmente.
 - Semáforos com ciclo de 20 s (as luzes dos postes são aproximadas: cantos opostos mostram o mesmo eixo)
 - **Minimapa** no topo da tela (norte para cima) com ruas, pontos de interesse, carros e a moto
 - Moto procedural com piloto, rodas que giram, garfo que esterça e inclinação em curva
-- Física arcade-híbrida: aceleração, resistência, freio dianteiro/traseiro, direção, **grau com equilíbrio** (botão EQUIL estabiliza, com pontuação menor), **stoppie** (freio dianteiro forte em velocidade; muito rápido derruba), **borrachão** (DERRAP parado + ACEL), **derrapagem lateral** (DERRAP em curva), queda por batida ou por frear forte inclinado em alta velocidade, e reposicionamento
+- Física arcade-híbrida: aceleração, resistência, freio dianteiro/traseiro, direção, **grau com equilíbrio** (a assistência de equilíbrio agora só existe no teclado, tecla B), **stoppie** (freio dianteiro forte em velocidade; muito rápido derruba), **borrachão** (DERRAP parado + ACEL), **derrapagem lateral** (DERRAP em curva), queda por batida ou por frear forte inclinado em alta velocidade, e reposicionamento
 - Câmera em 3ª pessoa (botão VISÃO alterna para 1ª pessoa): segue suavemente, órbita 360° por gesto, zoom por pinça, anti-atravessar paredes, reset, persistência
-- Controles de toque com multitoque (analógico de direção, ACEL, EQUIL, DERRAP, freios, VISÃO, CÂM, VOLTAR, PAUSA). **O grau é ativado puxando o analógico para trás** (dedo para baixo, junto com ACEL); o analógico mostra "GRAU!" quando ativo
+- Controles de toque com multitoque (analógico de direção, ACEL, DERRAP, freios, VISÃO, CÂM, VOLTAR, PAUSA e o botão de interação que aparece sobre os acionadores). **O grau é ativado puxando o analógico para trás** (dedo para baixo, junto com ACEL); o analógico mostra "GRAU!" quando ativo
 - HUD (velocidade, pontos de grau, indicador de equilíbrio)
 - Salvamento das configurações de câmera (`user://settings.cfg`), tolerante a arquivo corrompido
 - Testes automatizados e workflow de build

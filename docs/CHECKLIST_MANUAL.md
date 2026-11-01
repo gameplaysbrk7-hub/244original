@@ -15,7 +15,7 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] F.TRAS baixa a dianteira durante o grau
 - [ ] Acelerar demais no grau derruba a moto para trás (QUEDA!) e ela volta sozinha
 - [ ] VOLTAR reposiciona a moto no início
-- [ ] EQUIL durante o grau segura a dianteira num ângulo estável
+- [ ] Não existe mais botão EQUIL; o grau se mantém só com o acelerador e o freio traseiro
 - [ ] Freio dianteiro forte em velocidade levanta a traseira (stoppie); em velocidade muito alta derruba
 - [ ] DERRAP + ACEL parado faz borrachão (fumaça, giro no lugar)
 - [ ] DERRAP em curva em velocidade faz a moto escorregar de lado
@@ -28,6 +28,13 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] CÂM restaura a posição padrão
 - [ ] Câmera não atravessa prédios nem muros
 - [ ] Fechar e reabrir o jogo mantém distância e altura da câmera
+
+## Botão de interação
+- [ ] O botão de interação só aparece quando a moto (ou o personagem) está parada em cima de um marcador
+- [ ] Na garagem o botão se chama GARAGEM e abre a garagem direto; ao sair, o jogo continua sem passar pela pausa
+- [ ] Na hamburgueria o botão se chama ENTREGA e sorteia uma entrega; com missão ativa o botão some
+- [ ] Na casa de destino o botão se chama ENTREGAR; chegar lá sozinho NÃO entrega; tocar entrega e paga
+- [ ] A posição do botão pode ser mudada em Configurações → Controles → REPOSICIONAR CONTROLES
 
 ## Ré, andar a pé e queda
 - [ ] Moto parada + toque no freio traseiro: anda de ré devagar, o piloto põe os pés no chão e anda como na vida real; soltar o freio para
@@ -44,7 +51,7 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 ## Cidade e trânsito
 - [ ] Os carros andam pelas ruas, fazem curvas nos cruzamentos e param no vermelho
 - [ ] Existem 3 hamburguerias (letreiro, toldo, hambúrguer no telhado) e casas "CASA 1..8" com marcador verde
-- [ ] Entrega: pegar o pedido na hamburgueria, a bolsa vermelha aparece na moto, entregar na casa
+- [ ] Parado numa hamburgueria aparece o botão ENTREGA; tocar sorteia uma entrega (bolsa vermelha na moto, marcador amarelo na casa)
 - [ ] As 3 motos têm visual claramente diferente (GC 125 clássica, GC 160 moderna, TORRADO 300 trail)
 - [ ] Moto começa na avenida central; dá para chegar à garagem, oficina, posto e área de treino
 - [ ] Prédios, postes e muros de limite têm colisão; a moto não atravessa nada
@@ -64,8 +71,8 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Pintura de carenagem, quadro e rodas muda a moto de verdade
 - [ ] Rodas esportivas, baú, escape esportivo, adesivos e retrovisores aparecem na moto
 - [ ] Suspensão macia/firme muda a sensação de direção
-- [ ] Pausa → Missões: iniciar entrega mostra marcador amarelo e objetivo na tela
-- [ ] Entrega concluída paga uma vez; falhar por tempo não paga
+- [ ] Pausa → Missões lista só grau e percursos; as entregas vêm do botão ENTREGA na hamburgueria
+- [ ] Entrega concluída (botão ENTREGAR) paga uma vez; falhar por tempo não paga
 - [ ] Desafio de grau e percurso com checkpoints funcionam
 - [ ] Pausa → Garagem longe do marcador G mostra aviso; perto abre a garagem
 - [ ] Fechar e reabrir o jogo mantém dinheiro, moto escolhida, peças e cores

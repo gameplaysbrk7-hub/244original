@@ -24,6 +24,8 @@ const Pedestrian := preload("res://scripts/player/pedestrian.gd")
 
 enum Mode { MENU, PLAYING, PAUSED, GARAGE }
 
+const TRIGGER_RADIUS := 4.5   # distância ao acionador para o botão de interação aparecer
+
 var bike: Motorcycle
 var cam: FollowCamera
 var touch: TouchControls
@@ -46,6 +48,7 @@ var mode: int = Mode.MENU
 var _return_mode: int = Mode.MENU
 var _garage_pos: Vector3 = Vector3.ZERO
 var _edit_bar: VBoxContainer
+var _interaction: Dictionary = {}
 
 
 func _ready() -> void:
@@ -160,6 +163,7 @@ func _ready() -> void:
 	touch.camera_reset_pressed.connect(_reset_camera)
 	touch.respawn_pressed.connect(_on_respawn_pressed)
 	touch.mount_pressed.connect(_on_mount_pressed)
+	touch.interact_pressed.connect(_on_interact_pressed)
 	ped.stepped.connect(audio.play_step)
 	ped.mount_finished.connect(_finish_mount)
 	ped.lift_finished.connect(_finish_lift)
@@ -244,6 +248,7 @@ func _process(_delta: float) -> void:
 	_update_mount_label()
 	hud.set_objective(missions.objective_text())
 	hud.set_clock(day.clock_text())
+	_update_interaction()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -332,6 +337,8 @@ func _open_garage() -> void:
 	_return_mode = mode
 	mode = Mode.GARAGE
 	menu.close()
+	get_tree().paused = true
+	_touch_enabled(false)
 	cam.showroom = true
 	garage.open()
 
@@ -340,10 +347,58 @@ func _close_garage() -> void:
 	mode = _return_mode
 	if mode == Mode.MENU:
 		menu.open("title")
+	elif mode == Mode.PLAYING:
+		_start_playing()
 	else:
 		cam.showroom = false
 		cam.snap()
 		menu.open("pause")
+
+
+# ------------------------------------------------ botão de interação (acionadores)
+
+## Descobre se o jogador está parado sobre um acionador e qual nome o botão deve ter:
+## GARAGEM (garagem, só de moto), ENTREGA (hamburgueria, sem missão ativa) ou
+## ENTREGAR (casa de destino da entrega em andamento).
+func _compute_interaction() -> Dictionary:
+	if mode != Mode.PLAYING:
+		return {}
+	var actor: Node3D = ped if on_foot else bike
+	if on_foot:
+		if not ped.can_act() or ped.speed > 1.2:
+			return {}
+	elif bike.fallen or bike.parked or absf(bike.speed) > 2.0:
+		return {}
+	var pos := actor.global_position
+	for p in city_info["pois"]:
+		var at: Vector3 = p["pos"]
+		if Vector2(pos.x - at.x, pos.z - at.z).length() > TRIGGER_RADIUS:
+			continue
+		var id: String = p["id"]
+		if id == "garagem" and not on_foot:
+			return {"label": "GARAGEM", "kind": "garage", "id": id}
+		if id.begins_with("hamburgueria_") and not missions.is_active():
+			return {"label": "ENTREGA", "kind": "pickup", "id": id}
+		if id.begins_with("casa_") and missions.can_deliver_at(id):
+			return {"label": "ENTREGAR", "kind": "deliver", "id": id}
+	return {}
+
+
+func _update_interaction() -> void:
+	_interaction = _compute_interaction()
+	touch.interact_label = str(_interaction.get("label", ""))
+
+
+func _on_interact_pressed() -> void:
+	_interaction = _compute_interaction()
+	match str(_interaction.get("kind", "")):
+		"garage":
+			_open_garage()
+		"pickup":
+			missions.start_delivery(str(_interaction["id"]))
+		"deliver":
+			var actor: Node3D = ped if on_foot else bike
+			missions.deliver(actor.global_position)
 
 
 # ------------------------------------------- a pé: descer, subir, cair, levantar

@@ -1,24 +1,9 @@
 extends RefCounted
-## Missões do jogo. Tipos: "delivery" (pegar o pedido numa hamburgueria e entregar numa casa),
-## "wheelie" (grau longo), "checkpoints" (percurso com pontos em ordem).
+## Missões do menu: "wheelie" (grau longo) e "checkpoints" (percurso com pontos em ordem).
+## As entregas ("delivery") não ficam no menu: nascem sorteadas nas hamburguerias (veja make_delivery).
 ## Tempos em segundos, recompensa em R$.
 
 const MISSIONS := [
-	{"id": "entrega_1", "type": "delivery", "title": "Primeiro pedido",
-		"desc": "Pegue o pedido na HAMBURGUERIA 1 e entregue na CASA 1.",
-		"from": "hamburgueria_1", "to": "casa_1", "time": 120.0, "reward": 300},
-	{"id": "entrega_2", "type": "delivery", "title": "Pedido do almoço",
-		"desc": "Pegue o pedido na HAMBURGUERIA 2 e entregue na CASA 3.",
-		"from": "hamburgueria_2", "to": "casa_3", "time": 130.0, "reward": 400},
-	{"id": "entrega_3", "type": "delivery", "title": "Lanche da tarde",
-		"desc": "Pegue o pedido na HAMBURGUERIA 3 e entregue na CASA 5.",
-		"from": "hamburgueria_3", "to": "casa_5", "time": 140.0, "reward": 450},
-	{"id": "entrega_4", "type": "delivery", "title": "Entrega do outro lado",
-		"desc": "Pegue o pedido na HAMBURGUERIA 1 e entregue na CASA 7.",
-		"from": "hamburgueria_1", "to": "casa_7", "time": 160.0, "reward": 550},
-	{"id": "entrega_5", "type": "delivery", "title": "Pedido da família",
-		"desc": "Pegue o pedido na HAMBURGUERIA 2 e entregue na CASA 2.",
-		"from": "hamburgueria_2", "to": "casa_2", "time": 180.0, "reward": 650},
 	{"id": "grau_5", "type": "wheelie", "title": "Desafio de grau: 5 s",
 		"desc": "Puxe o analógico para trás e mantenha o grau por 5 segundos.",
 		"target": 5.0, "time": 120.0, "reward": 350},
@@ -41,3 +26,18 @@ static func find(id: String) -> Dictionary:
 		if m["id"] == id:
 			return m.duplicate(true)
 	return {}
+
+
+## Monta uma entrega sorteada: tempo e recompensa dependem da distância (em linha reta).
+static func make_delivery(from_id: String, to_id: String, from_name: String, to_name: String, distance: float) -> Dictionary:
+	var reward := int(round((100.0 + distance * 2.5) / 10.0)) * 10
+	return {
+		"id": "entrega_%s_%s" % [from_id, to_id],
+		"type": "delivery",
+		"title": "Entrega para %s" % to_name,
+		"desc": "Leve o pedido da %s até a %s e toque em ENTREGAR." % [from_name, to_name],
+		"from": from_id,
+		"to": to_id,
+		"time": 45.0 + distance * 0.3,
+		"reward": reward,
+	}
