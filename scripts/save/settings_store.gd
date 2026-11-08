@@ -17,6 +17,13 @@ var volume_ambient: float = 0.6
 var quality: int = 0                # 0 automática, 1 baixa, 2 média, 3 alta
 var day_minutes: float = 8.0        # minutos reais por dia (0 = tempo parado)
 var time_of_day: float = 9.0
+var render_scale: float = 0.0       # resolução 3D; 0 = automática (pela qualidade)
+var view_distance: int = 0          # distância de renderização em metros; 0 = automática
+var shadows: int = 0                # 0 automático, 1 desligadas, 2 ligadas
+var effects: bool = true            # névoa, fumaça dos pneus e luzes de poste
+var control_scale: float = 1.0      # tamanho dos botões de toque
+var camera_sensitivity: float = 1.0 # sensibilidade ao girar a câmera
+var show_minimap: bool = true
 var control_offsets: Dictionary = {}  # id do botão -> Vector2 (fração da tela)
 
 
@@ -42,6 +49,15 @@ func load_settings() -> bool:
 	quality = clampi(int(_num(cfg, "graphics", "quality", float(quality))), 0, 3)
 	day_minutes = clampf(_num(cfg, "game", "day_minutes", day_minutes), 0.0, 30.0)
 	time_of_day = fposmod(_num(cfg, "game", "time_of_day", time_of_day), 24.0)
+	render_scale = clampf(_num(cfg, "graphics", "render_scale", render_scale), 0.0, 1.0)
+	if render_scale > 0.0:
+		render_scale = clampf(render_scale, 0.4, 1.0)
+	view_distance = clampi(int(_num(cfg, "graphics", "view_distance", float(view_distance))), 0, 400)
+	shadows = clampi(int(_num(cfg, "graphics", "shadows", float(shadows))), 0, 2)
+	effects = _bool(cfg, "graphics", "effects", effects)
+	control_scale = clampf(_num(cfg, "controls", "scale", control_scale), 0.6, 1.5)
+	camera_sensitivity = clampf(_num(cfg, "controls", "camera_sensitivity", camera_sensitivity), 0.4, 2.5)
+	show_minimap = _bool(cfg, "game", "show_minimap", show_minimap)
 	control_offsets = {}
 	if cfg.has_section("layout"):
 		for key in cfg.get_section_keys("layout"):
@@ -64,11 +80,23 @@ func save_settings() -> bool:
 	cfg.set_value("audio", "sfx", volume_sfx)
 	cfg.set_value("audio", "ambient", volume_ambient)
 	cfg.set_value("graphics", "quality", quality)
+	cfg.set_value("graphics", "render_scale", render_scale)
+	cfg.set_value("graphics", "view_distance", view_distance)
+	cfg.set_value("graphics", "shadows", shadows)
+	cfg.set_value("graphics", "effects", effects)
+	cfg.set_value("controls", "scale", control_scale)
+	cfg.set_value("controls", "camera_sensitivity", camera_sensitivity)
+	cfg.set_value("game", "show_minimap", show_minimap)
 	cfg.set_value("game", "day_minutes", day_minutes)
 	cfg.set_value("game", "time_of_day", time_of_day)
 	for key in control_offsets:
 		cfg.set_value("layout", str(key), control_offsets[key])
 	return cfg.save(PATH) == OK
+
+
+static func _bool(cfg: ConfigFile, section: String, key: String, fallback: bool) -> bool:
+	var v: Variant = cfg.get_value(section, key, fallback)
+	return v if typeof(v) == TYPE_BOOL else fallback
 
 
 static func _num(cfg: ConfigFile, section: String, key: String, fallback: float) -> float:

@@ -29,7 +29,20 @@ Marque no aparelho real. Anote modelo, versão do Android e FPS aproximado.
 - [ ] Câmera não atravessa prédios nem muros
 - [ ] Fechar e reabrir o jogo mantém distância e altura da câmera
 
-## Celular
+## Celular v1.4 (tempo real, apps dentro do aparelho)
+- [ ] O celular sobe, os apps abrem dentro da tela (fundo preto) e HOME volta à tela inicial em TODOS os apps
+- [ ] Com o celular aberto o trânsito e o relógio continuam (o jogo não pausa); só o botão PAUSA pausa
+- [ ] Mapa: o celular se aproxima e gira para a horizontal; a seta amarela segue o personagem (a pé e na moto); HOME desfaz
+- [ ] Entregas: uma oferta por vez, ACEITAR/RECUSAR (várias recusas seguidas), COLETAR na hamburgueria, ENTREGAR só no endereço
+- [ ] Painel de entregas (total, valor, sessão) atualiza; ganhos de corridas não se misturam
+- [ ] Corridas: oferta única, ACEITAR/RECUSAR, estatísticas próprias
+- [ ] Configurações: categorias com ícone, cada opção muda o jogo e fica salva depois de reabrir
+- [ ] Telefone: teclas tocam som e piscam; GUINCHO mostra o valor e fecha o celular
+- [ ] A pé: tirar o celular do bolso ao abrir e guardar ao fechar; na moto sem essa animação
+- [ ] 1ª pessoa na moto e a pé acompanha a cabeça; voltar para 3ª pessoa funciona
+- [ ] Bag de entregas nas costas do personagem (na moto e a pé), sem bag presa à moto
+
+## Celular (versões antigas)
 - [ ] O botão do celular aparece só com a imagem (sem texto), na moto e a pé
 - [ ] Tocar nele faz o celular subir da borda de baixo e ficar inteiro visível do lado direito
 - [ ] O "X" no canto superior direito fecha o celular (ele desce) e o jogo continua

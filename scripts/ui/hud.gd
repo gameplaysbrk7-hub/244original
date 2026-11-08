@@ -63,6 +63,11 @@ func setup_minimap(bike: Node3D, info: Dictionary, traffic: Node, missions: Node
 	add_child(_minimap)
 
 
+func set_minimap_visible(on: bool) -> void:
+	if _minimap != null:
+		_minimap.visible = on
+
+
 func set_clock(text: String) -> void:
 	_clock.text = text
 

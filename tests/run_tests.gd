@@ -21,6 +21,8 @@ const PerformanceGuard := preload("res://scripts/core/performance_guard.gd")
 const Humanoid := preload("res://scripts/player/humanoid.gd")
 const Pedestrian := preload("res://scripts/player/pedestrian.gd")
 const PhoneUi := preload("res://scripts/ui/phone_ui.gd")
+const Minimap := preload("res://scripts/ui/minimap.gd")
+const Catalog := preload("res://scripts/missions/mission_catalog.gd")
 
 var failures: int = 0
 var checks: int = 0
@@ -61,6 +63,7 @@ func _run_all() -> void:
 	_test_rider_model()
 	await _test_reverse_fall_foot()
 	await _test_phone_ui()
+	_test_minimap_arrow()
 	await _test_camera_and_main()
 	print("== %d verificações, %d falhas ==" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -90,7 +93,13 @@ func _test_files() -> void:
 		"res://scripts/player/humanoid.gd",
 		"res://scripts/player/pedestrian.gd",
 		"res://scripts/ui/phone_ui.gd",
-		"res://scripts/ui/map_screen.gd",
+		"res://scripts/ui/phone/phone_app.gd",
+		"res://scripts/ui/phone/map_app.gd",
+		"res://scripts/ui/phone/deliveries_app.gd",
+		"res://scripts/ui/phone/races_app.gd",
+		"res://scripts/ui/phone/settings_app.gd",
+		"res://scripts/ui/phone/dialer_app.gd",
+		"res://assets/ui/phone_app.png",
 		"res://assets/ui/phone.png",
 		"res://assets/ui/phone_button.png",
 		"res://resources/vehicles/corisco.tres",
@@ -271,8 +280,16 @@ func _test_camera_and_main() -> void:
 	check("câmera orbita por gesto", absf(rig.yaw_offset) > 0.1)
 	rig.reset_view()
 	check("câmera volta à posição padrão", is_zero_approx(rig.yaw_offset))
+	var head_target := Node3D.new()
+	head_target.position = Vector3(2, 1.7, 3)
+	root.add_child(head_target)
+	rig.head_node = head_target
 	rig.toggle_view()
 	await _frames(5)
+	check("câmera em 1ª pessoa fica presa à cabeça indicada", rig.camera.global_position.distance_to(head_target.global_position) < 0.25)
+	head_target.queue_free()
+	rig.head_node = null
+	await _frames(3)
 	check("câmera em primeira pessoa fica junto da moto", rig.first_person and rig.camera.global_position.distance_to(dummy.global_position) < 2.5)
 	rig.toggle_view()
 	rig.queue_free()
@@ -295,52 +312,75 @@ func _test_camera_and_main() -> void:
 	await _frames(5)
 	check("jogar libera a simulação", m.mode == 1 and not m.get_tree().paused)
 	m.bike.input_brake_rear = 0.0
+	# ----- primeira pessoa na moto: a câmera segue a cabeça do piloto -----
+	m.cam.first_person = true
+	await _frames(5)
+	var rh: Node3D = m.bike.rider_head()
+	check("1ª pessoa na moto: câmera na cabeça do piloto e capacete escondido", m.cam.camera.global_position.distance_to(rh.global_position) < 0.3 and not rh.visible)
+	m.cam.first_person = false
+	await _frames(3)
+	check("transição de volta para a 3ª pessoa mostra o piloto", rh.visible and m.cam.camera.global_position.distance_to(rh.global_position) > 1.5)
+
+	# ----- celular em tempo real, apps dentro do aparelho e HOME -----
+	var t0: float = m.day.time_of_day
 	m._open_phone()
-	check("celular: o botão abre o celular e pausa o jogo", m.mode == 4 and m.phone.visible and m.get_tree().paused)
+	check("celular: o botão abre o celular sem pausar o jogo", m.phone.is_open() and m.phone.visible and m.mode == 1 and not m.get_tree().paused)
+	check("celular: na moto não há animação de tirar do bolso", not m.ped.phone_target)
 	for i in 3:
 		m.phone._process(0.2)
-	var evp := InputEventMouseButton.new()
-	evp.button_index = MOUSE_BUTTON_LEFT
-	evp.pressed = true
-	evp.position = m.phone.app_center("configuracoes")
-	m.phone._gui_input(evp)
-	for i in 3:
+	var prect: Rect2 = m.phone.screen_rect()
+	check("celular: aparece inteiro do lado direito da tela", prect.position.x > m.phone.size.x * 0.5 and prect.position.y >= -1.0 and prect.end.y <= m.phone.size.y + 1.0 and prect.end.x <= m.phone.size.x + 1.0)
+	await _frames(30)
+	check("celular: o mundo continua em tempo real (relógio do jogo avança)", m.day.time_of_day != t0 or m.day.day_minutes == 0.0)
+	for a_name in ["mapa", "entregas", "corridas", "configuracoes", "ligacoes"]:
+		m.phone.open_app(a_name)
+		var node: Control = m.phone.current_app()
+		check("celular: app %s abre dentro do aparelho, na tela de fundo preto" % a_name, m.phone.app == a_name and node != null and node.visible and m.phone._tex_rect.texture == m.phone._tex_app)
+		m.phone._on_device_input(_tap(PhoneUi.HOME_CENTER))
+		check("celular: HOME no app %s volta à tela inicial" % a_name, m.phone.app == "" and m.phone._tex_rect.texture == m.phone._tex_home)
+	m.phone.open_app("mapa")
+	for i in 4:
 		m.phone._process(0.2)
-	check("celular: Configurações abre direto, sem passar pela pausa", m.menu.visible and m.menu._current == "settings" and m.menu.phone_origin and m.mode == 4)
-	m.menu._go_back()
-	check("celular: voltar das configurações retoma o jogo", m.mode == 1 and (not m.menu.visible) and not m.get_tree().paused)
-	m.menu.open("pause")
-	var pause_texts: Array = []
-	for bc in m.menu._box.get_children():
-		if bc is Button:
-			pause_texts.append((bc as Button).text)
+	check("mapa: o celular se aproxima e gira 90 graus para a horizontal", m.phone.zoom >= 1.0 and is_equal_approx(m.phone._device.rotation, -PI * 0.5))
+	m.phone._on_device_input(_tap(PhoneUi.HOME_CENTER))
+	for i in 4:
+		m.phone._process(0.2)
+	check("mapa: HOME desfaz a rotação e o zoom", m.phone.zoom <= 0.0 and is_zero_approx(m.phone._device.rotation))
+
+	# ----- configurações dentro do celular -----
+	m.phone.open_app("configuracoes")
+	var sa: Control = m.phone.current_app()
+	sa._open_page("graficos")
+	check("configurações: categorias abrem subpáginas", sa._page == "graficos")
+	m.phone._on_device_input(_tap(PhoneUi.BACK_CENTER))
+	check("celular: botão voltar sai da subpágina e continua no app", sa._page == "" and m.phone.app == "configuracoes")
+	sa.set_value("shadows", 1)
+	check("configurações: sombras desligadas de verdade", m.settings.shadows == 1 and not m.city_info["sun"].shadow_enabled)
+	sa.set_value("shadows", 2)
+	check("configurações: sombras ligadas de verdade", m.city_info["sun"].shadow_enabled)
+	sa.set_value("control_scale", 1.2)
+	check("configurações: tamanho dos controles aplicado", is_equal_approx(m.touch.control_scale, 1.2))
+	sa.set_value("render_scale", 0.7)
+	check("configurações: resolução aplicada ao renderizador", is_equal_approx(m.get_viewport().scaling_3d_scale, 0.7))
+	sa.set_value("render_scale", 0.0)
+	var reloaded := SettingsStore.new()
+	reloaded.load_settings()
+	check("configurações: ficam salvas em disco", reloaded.shadows == 2 and is_equal_approx(reloaded.control_scale, 1.2))
+	reloaded.free()
+	sa.set_value("control_scale", 1.0)
+	m.phone.hide_now()
+	m._pause()
+	check("pausa: abre o menu de pausa e pausa o jogo", m.mode == 2 and m.get_tree().paused)
+	var pause_texts: Array = _button_texts(m.menu._box)
 	check("pausa: configurações só existem pelo celular", not pause_texts.has("CONFIGURAÇÕES"))
-	m.menu.close()
 	m._start_playing()
-	m._launch_app("entregas")
-	check("celular: app Entregas abre", m.menu._current == "deliveries" and m.menu.visible)
-	m.menu._go_back()
-	m._launch_app("ligacoes")
-	check("celular: app Ligações abre", m.menu._current == "calls" and m.menu.visible)
-	m.menu._go_back()
-	m._launch_app("corridas")
-	check("celular: app Corridas abre a lista de missões", m.menu._current == "missions" and m.menu.visible)
-	m.menu._go_back()
-	m._launch_app("mapa")
-	check("celular: app Mapa abre o mapa grande", m.map_screen.visible)
-	m.map_screen._close()
-	check("celular: fechar o mapa retoma o jogo", m.mode == 1 and not m.map_screen.visible)
-	var photo_path: String = m._save_photo(Image.create(32, 32, false, Image.FORMAT_RGB8))
-	check("celular: app Câmera salva a foto", photo_path != "" and FileAccess.file_exists(photo_path))
-	if photo_path != "":
-		DirAccess.remove_absolute(photo_path)
+	await _frames(3)
+
+	# ----- garagem pelo botão de interação -----
 	var garage_pos := Vector3.ZERO
-	var burger_pos := Vector3.ZERO
 	for pp in m.city_info["pois"]:
 		if pp["id"] == "garagem":
 			garage_pos = pp["pos"]
-		if pp["id"] == "hamburgueria_1":
-			burger_pos = pp["pos"]
 	m.bike.global_position = garage_pos + Vector3(0, 0.3, 0)
 	await _frames(5)
 	check("interação: parado na garagem o botão vira GARAGEM", m.touch.interact_label == "GARAGEM")
@@ -349,38 +389,123 @@ func _test_camera_and_main() -> void:
 	m.garage._on_back()
 	await _frames(3)
 	check("interação: sair da garagem volta direto ao jogo", m.mode == 1 and not m.get_tree().paused)
-	m.bike.global_position = burger_pos + Vector3(0, 0.3, 0)
-	await _frames(5)
-	check("interação: parado na hamburgueria o botão vira ENTREGA", m.touch.interact_label == "ENTREGA")
-	var money_before: int = m.state.money
+
+	# ----- ofertas e fluxo de entregas pelo app -----
+	var mm = m.missions
+	m._open_phone()
+	m.phone.open_app("entregas")
+	var da: Control = m.phone.current_app()
+	var dtexts := _button_texts(da)
+	check("entregas: uma única oferta com ACEITAR e RECUSAR", (not mm.delivery_offer.is_empty()) and dtexts.has("ACEITAR") and dtexts.has("RECUSAR"))
+	var d_prev: String = str(mm.delivery_offer["id"])
+	var d_ok := true
+	for i in 8:
+		da._decline()
+		if str(mm.delivery_offer["id"]) == d_prev:
+			d_ok = false
+		d_prev = str(mm.delivery_offer["id"])
+	check("entregas: recusar várias vezes seguidas sempre mostra outra oferta", d_ok)
+	var dest_id: String = str(mm.delivery_offer["to"])
+	var from_id: String = str(mm.delivery_offer["from"])
+	da._accept()
+	check("entregas: aceitar registra a entrega ativa", mm.is_delivery_active() and mm.stage == 0)
+	var from_at: Vector3 = mm.poi_positions[from_id]
+	var dest_at: Vector3 = mm.poi_positions[dest_id]
+	check("entregas: não é possível entregar antes de coletar", not mm.deliver(dest_at))
+	m.phone.hide_now()
+	m.bike.global_position = from_at + Vector3(0, 0.3, 0)
+	await _frames(6)
+	check("entregas: na hamburgueria de retirada aparece o botão COLETAR", m.touch.interact_label == "COLETAR")
 	m._on_interact_pressed()
-	check("interação: ENTREGA sorteia a missão de entrega", m.missions.is_active() and m.missions.active["type"] == "delivery")
-	m.menu.open_from_phone("deliveries")
-	check("celular: app Entregas mostra a entrega em andamento", m.menu._box.get_child_count() > 6)
-	m.menu.close()
-	await _frames(3)
-	check("interação: com missão ativa o botão da hamburgueria some", m.touch.interact_label == "")
-	var dest_id: String = m.missions.active["to"]
-	var dest_at := Vector3.ZERO
-	for pp in m.city_info["pois"]:
-		if pp["id"] == dest_id:
-			dest_at = pp["pos"]
+	await _frames(2)
+	check("entregas: COLETAR inicia o trajeto até o cliente", mm.stage == 1 and m.bike.carrying and m.ped.carrying)
+	check("bag: aparece nas costas do personagem e não existe mais presa à moto", m.bike._rider.bag_node.visible and (not m.bike.parts.has("bag")))
 	m.bike.global_position = dest_at + Vector3(0, 0.3, 0)
 	await _frames(8)
-	check("interação: chegar na casa não entrega sozinho; o botão vira ENTREGAR", m.missions.is_active() and m.touch.interact_label == "ENTREGAR")
-	m._on_interact_pressed()
-	check("interação: ENTREGAR conclui a entrega e paga", (not m.missions.is_active()) and m.state.money > money_before)
+	check("entregas: chegar ao endereço NÃO entrega sozinho nem usa o botão de interação do mundo", mm.is_delivery_active() and m.touch.interact_label == "")
+	m._open_phone()
+	m.phone.open_app("entregas")
+	da.refresh()
+	check("entregas: no endereço o app mostra o botão ENTREGAR", _button_texts(da).has("ENTREGAR"))
+	var money_before: int = m.state.money
+	var d_count: int = int(m.state.stats["deliveries"])
+	da._deliver()
+	check("entregas: ENTREGAR conclui, paga e atualiza o painel", (not mm.is_active()) and m.state.money > money_before and int(m.state.stats["deliveries"]) == d_count + 1 and mm.session_deliveries == 1 and not m.bike.carrying)
+	check("bag: some das costas depois da entrega", not m.bike._rider.bag_node.visible)
+
+	# ----- corridas -----
+	m.phone.open_app("corridas")
+	var ra: Control = m.phone.current_app()
+	var rtexts := _button_texts(ra)
+	check("corridas: uma oferta com ACEITAR e RECUSAR", (not mm.race_offer.is_empty()) and rtexts.has("ACEITAR") and rtexts.has("RECUSAR"))
+	var r_prev: String = str(mm.race_offer["id"])
+	var r_ok := true
+	for i in 6:
+		ra._decline()
+		if str(mm.race_offer["id"]) == r_prev:
+			r_ok = false
+		r_prev = str(mm.race_offer["id"])
+	check("corridas: recusar mostra outra oferta", r_ok)
+	var earned_d: int = int(m.state.stats["delivery_earned"])
+	ra._accept()
+	check("corridas: aceitar inicia a corrida", mm.is_active() and str(mm.active["type"]) != "delivery")
+	if str(mm.active["type"]) == "wheelie":
+		m.bike.wheelie_time = float(mm.active["target"]) + 0.5
+		mm._physics_process(0.01)
+	else:
+		var cps: Array = mm.active["points"].duplicate()
+		for cp in cps:
+			m.bike.global_position = cp + Vector3(0, 0.3, 0)
+			mm._physics_process(0.01)
+	check("corridas: concluir atualiza só os ganhos e a contagem de corridas", (not mm.is_active()) and int(m.state.stats["races"]) == 1 and int(m.state.stats["race_earned"]) > 0 and int(m.state.stats["delivery_earned"]) == earned_d)
+
+	# ----- telefone: teclado sonoro e guincho -----
+	m.phone.open_app("ligacoes")
+	var dial: Control = m.phone.current_app()
+	var keys := _button_texts(dial)
+	var all_keys := true
+	for k in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "#"]:
+		all_keys = all_keys and keys.has(k)
+	check("telefone: teclado com 0 a 9, * e #", all_keys)
+	_find_button(dial, "5", false).pressed.emit()
+	check("telefone: cada tecla toca o seu som", m.audio._keys.has("5") and m.audio._ui.stream == m.audio._keys["5"])
+	var tow_button := _find_button(dial, "GUINCHO", true)
+	check("telefone: o contato GUINCHO mostra o valor realmente cobrado", tow_button != null and tow_button.text.contains(GameState.format_money(m.TOW_COST)))
+	m.phone.hide_now()
 	m.bike.global_position = m.city_info["spawn"] + Vector3(0, 0.3, 0)
 	await _frames(5)
 	m._dismount()
 	check("a pé: descer da moto parada", m.on_foot and m.bike.parked and m.ped.visible)
 	await _frames(45)
 	check("a pé: personagem fica livre e perto da moto pode subir", m.ped.state == Pedestrian.State.WALK and m.touch.foot_mode and m.touch.mount_label == "SUBIR")
+	m._open_phone()
+	await _frames(45)
+	check("a pé: o personagem tira o celular do bolso e o segura na mão", m.ped.phone_target and m.ped._phone_t >= 0.99 and m.ped.human.phone_node.visible)
+	m.phone.close()
+	for i in 3:
+		m.phone._process(0.2)
+	await _frames(45)
+	check("a pé: ao fechar o celular o personagem o guarda no bolso", (not m.ped.phone_target) and m.ped._phone_t <= 0.01 and not m.ped.human.phone_node.visible)
+	m.cam.first_person = true
+	await _frames(5)
+	var ph_head: Node3D = m.ped.human.head_node
+	check("1ª pessoa a pé: a câmera acompanha a cabeça do personagem", m.cam.camera.global_position.distance_to(ph_head.global_position) < 0.3 and not ph_head.visible)
+	m.cam.first_person = false
+	await _frames(3)
+	check("1ª pessoa a pé: voltar à 3ª pessoa mostra o personagem", ph_head.visible)
 	m.state.money = 500
 	m.ped.global_position = m.bike.global_position + Vector3(0, 0.2, -60)
 	await _frames(3)
-	m._on_tow_requested()
-	check("guincho: a pé, traz a moto até o personagem e cobra a taxa", m.state.money == 400 and m.bike.global_position.distance_to(m.ped.global_position) < 4.0 and m.bike.parked and not m.bike.fallen)
+	m._open_phone()
+	m.phone.open_app("ligacoes")
+	_find_button(m.phone.current_app(), "GUINCHO", true).pressed.emit()
+	check("guincho: pelo app traz a moto até o personagem, cobra e fecha o celular", m.state.money == 400 and m.bike.global_position.distance_to(m.ped.global_position) < 4.0 and m.bike.parked and (not m.bike.fallen) and not m.phone.is_open())
+	for i in 3:
+		m.phone._process(0.2)
+	var photo_path: String = m._save_photo(Image.create(32, 32, false, Image.FORMAT_RGB8))
+	check("celular: app Câmera salva a foto", photo_path != "" and FileAccess.file_exists(photo_path))
+	if photo_path != "":
+		DirAccess.remove_absolute(photo_path)
 	m._on_mount_pressed()
 	await _frames(50)
 	check("a pé: subir na moto devolve o controle", (not m.on_foot) and (not m.bike.parked) and m.bike.rider_on_bike and not m.ped.visible)
@@ -494,6 +619,8 @@ func _test_progression() -> void:
 	check("progressão: sem arquivo começa com padrão válido", (not loaded) and st.money == 500 and st.selected_bike == "starter" and st.unlocked_bikes == ["starter"])
 
 	st.add_money(1000)
+	st.record_stat("delivery", 300)
+	st.record_stat("race", 200)
 	st.set_custom_value("starter", "body_color", Color(0.1, 0.2, 0.3))
 	st.set_custom_value("starter", "suspension", 2)
 	check("progressão: salvar", st.save_game())
@@ -501,6 +628,7 @@ func _test_progression() -> void:
 	st2.save_path = path
 	var base := BikeModel.default_custom(BikeCatalog.load_profile("starter"))
 	var c2 := st2.get_custom("starter", base)
+	check("progressão: estatísticas de entregas e corridas salvas separadas", st2.load_game() and int(st2.stats["deliveries"]) == 1 and int(st2.stats["delivery_earned"]) == 300 and int(st2.stats["races"]) == 1 and int(st2.stats["race_earned"]) == 200)
 	check("progressão: carregar dinheiro e personalização", st2.load_game() and st2.money == 1500 and absf(st2.get_custom("starter", base)["body_color"].r - 0.1) < 0.01 and int(st2.get_custom("starter", base)["suspension"]) == 2)
 
 	st.add_money(500)
@@ -565,37 +693,69 @@ func _test_missions() -> void:
 	mm.setup(st, bike, pois)
 
 	mm.rng.seed = 7
-	check("entrega: hamburgueria sorteia uma entrega", mm.start_delivery("hamburgueria_1") and mm.is_active() and mm.active["type"] == "delivery")
-	var dest: String = mm.active["to"]
-	var dest_pos: Vector3 = mm.objective_pos()
-	var first_reward := int(mm.active["reward"])
-	check("entrega: destino é uma casa a mais de 50 m", dest.begins_with("casa_") and Vector2(dest_pos.x - 18.0, dest_pos.z - 30.0).length() >= 50.0 and first_reward >= 100)
-	check("entrega: não inicia duas missões ao mesmo tempo", (not mm.start("grau_5")) and (not mm.start_delivery("hamburgueria_1")))
-	check("entrega: o pedido já fica na moto", mm.stage == 1)
+	var offer := mm.roll_delivery_offer(Vector3.ZERO)
+	check("entrega: oferta sorteada traz retirada, destino, distância e pagamento", offer.has("from_name") and offer.has("to_name") and int(offer["reward"]) >= 100 and float(offer["route"]) >= 50.0)
+	var seen: Array = [str(offer["id"])]
+	var prev: String = str(offer["id"])
+	var repeated := false
+	for i in 12:
+		var nxt := mm.decline_delivery(Vector3.ZERO)
+		if str(nxt["id"]) == prev:
+			repeated = true
+		prev = str(nxt["id"])
+		seen.append(prev)
+	check("entrega: recusar várias vezes traz outra oferta, sem repetir a recusada na hora", (not repeated) and _unique(seen) >= 3)
+	var accepted: Dictionary = mm.delivery_offer.duplicate(true)
+	var first_reward := int(accepted["reward"])
+	var dest: String = accepted["to"]
+	var dest_pos: Vector3 = mm.poi_positions[dest]
+	check("entrega: aceitar ativa a entrega e o mapa aponta a hamburgueria", mm.accept_delivery() and mm.is_delivery_active() and mm.stage == 0 and mm.objective_pos().distance_to(Vector3(18, 0, 30)) < 0.1)
+	check("entrega: não inicia duas missões ao mesmo tempo", (not mm.start("grau_5")) and (not mm.accept_delivery()))
+	check("entrega: não entrega antes de coletar", not mm.deliver(dest_pos))
+	var carry := {"on": false}
+	mm.carrying_changed.connect(func(on): carry["on"] = on)
+	check("entrega: COLETAR retira o pedido e o objetivo passa a ser o cliente", mm.can_pickup_at("hamburgueria_1") and mm.pickup() and mm.stage == 1 and carry["on"] and mm.objective_pos().distance_to(dest_pos) < 0.1)
 	bike.global_position = dest_pos + Vector3(0, 0.3, 0)
 	mm._physics_process(0.01)
 	check("entrega: chegar ao destino NÃO conclui sozinho", mm.is_active() and st.money == 0)
-	check("entrega: não entrega longe do destino", not mm.deliver(Vector3(0, 0, 0)))
-	check("entrega: botão ENTREGAR no destino conclui e paga", mm.can_deliver_at(dest) and mm.deliver(dest_pos) and (not mm.is_active()) and st.money == first_reward)
+	check("entrega: não entrega longe do destino", not mm.deliver(Vector3(1000, 0, 1000)))
+	check("entrega: ENTREGAR no destino conclui, paga e atualiza só as estatísticas de entregas", mm.can_deliver(dest_pos) and mm.deliver(dest_pos) and (not mm.is_active()) and st.money == first_reward and int(st.stats["deliveries"]) == 1 and int(st.stats["delivery_earned"]) == first_reward and int(st.stats["races"]) == 0 and mm.session_deliveries == 1 and not carry["on"])
 	check("entrega: sem pagamento duplicado", (not mm.deliver(dest_pos)) and st.money == first_reward)
 	var expected := first_reward
-	mm.start_delivery("hamburgueria_1", dest)
+	mm.delivery_offer = accepted.duplicate(true)
+	mm.accept_delivery()
+	mm.pickup()
 	mm.deliver(dest_pos)
 	expected += int(round(first_reward * 0.4))
-	check("entrega: repetir o mesmo trajeto paga 40%", st.money == expected)
+	check("entrega: repetir o mesmo trajeto paga 40%", st.money == expected and int(st.stats["deliveries"]) == 2)
 
 	var fails := {"n": 0}
 	mm.failed.connect(func(_m, _r): fails["n"] += 1)
-	mm.start_delivery("hamburgueria_1", dest)
+	mm.delivery_offer = accepted.duplicate(true)
+	mm.accept_delivery()
 	for i in 400:
 		mm._physics_process(1.0)
-	check("entrega: falha por tempo sem pagar", fails["n"] == 1 and (not mm.is_active()) and st.money == expected)
+	check("entrega: falha por tempo sem pagar", fails["n"] == 1 and (not mm.is_active()) and st.money == expected and int(st.stats["deliveries"]) == 2)
+
+	var ro := mm.roll_race_offer()
+	var rprev: String = str(ro["id"])
+	var rrep := false
+	for i in 10:
+		var nr := mm.decline_race()
+		if str(nr["id"]) == rprev:
+			rrep = true
+		rprev = str(nr["id"])
+	check("corrida: recusar traz outra oferta, sem repetir a anterior", not rrep)
+	check("corrida: aceitar inicia a corrida", mm.accept_race() and mm.is_active() and str(mm.active["type"]) != "delivery")
+	mm.cancel()
+	var d_earned := int(st.stats["delivery_earned"])
 
 	mm.start("grau_5")
 	bike.wheelie_time = 5.5
 	mm._physics_process(0.01)
 	expected += 350
 	check("missão: desafio de grau", (not mm.is_active()) and st.money == expected)
+	check("corridas: ganhos e contagem separados dos de entregas", int(st.stats["races"]) == 1 and int(st.stats["race_earned"]) == 350 and int(st.stats["delivery_earned"]) == d_earned and mm.session_races == 1)
 
 	mm.start("percurso_centro")
 	var pts: Array = mm.active["points"].duplicate()
@@ -652,6 +812,14 @@ func _test_touch_wheelie() -> void:
 	touch._on_drag(0, Vector2(150, 700), Vector2(0, 200))
 	check("controles a pé: analógico vira movimento e não liga o grau", touch.stick_vec.y > 0.5 and not touch.wheelie)
 	touch._on_release(0)
+	touch.blocked_rect = Rect2(900, 0, 300, 700)
+	touch._on_press(7, Vector2(1000, 300))
+	check("controles: toques sobre o celular não controlam o jogo", touch._touches.is_empty())
+	touch.blocked_rect = Rect2()
+	var r_norm: float = touch._layout()["run"]["r"]
+	touch.control_scale = 1.3
+	check("controles: o tamanho dos botões acompanha a configuração", is_equal_approx(float(touch._layout()["run"]["r"]), r_norm * 1.3))
+	touch.control_scale = 1.0
 	touch.interact_label = "GARAGEM"
 	check("controles a pé: botão de interação aparece com nome variável", touch._layout().has("interact") and touch._layout()["interact"]["t"] == "GARAGEM")
 	touch.foot_mode = false
@@ -691,10 +859,18 @@ func _test_settings_final() -> void:
 	s.time_of_day = 21.5
 	s.traffic_density = 14
 	s.control_offsets = {"throttle": Vector2(-0.05, 0.02)}
+	s.render_scale = 0.85
+	s.view_distance = 180
+	s.shadows = 1
+	s.effects = false
+	s.control_scale = 1.25
+	s.camera_sensitivity = 1.5
+	s.show_minimap = false
 	check("configurações finais: salvar", s.save_settings())
 	var s2 := SettingsStore.new()
 	var loaded := s2.load_settings()
 	check("configurações finais: volume, qualidade, dia/noite, trânsito e posições dos botões", loaded and is_equal_approx(s2.volume_master, 0.4) and s2.quality == 3 and is_equal_approx(s2.day_minutes, 12.0) and is_equal_approx(s2.time_of_day, 21.5) and s2.traffic_density == 14 and s2.control_offsets.has("throttle") and (s2.control_offsets["throttle"] as Vector2).is_equal_approx(Vector2(-0.05, 0.02)))
+	check("configurações finais: resolução, distância, sombras, efeitos, tamanho, câmera e minimapa", is_equal_approx(s2.render_scale, 0.85) and s2.view_distance == 180 and s2.shadows == 1 and (not s2.effects) and is_equal_approx(s2.control_scale, 1.25) and is_equal_approx(s2.camera_sensitivity, 1.5) and not s2.show_minimap)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsStore.PATH))
 	s.free()
 	s2.free()
@@ -752,11 +928,17 @@ func _test_polish() -> void:
 	holder.add_child(tmgr)
 	var gfx := GraphicsManager.new()
 	holder.add_child(gfx)
-	gfx.setup(sun, cam, tmgr, dn, root)
+	gfx.setup(sun, cam, tmgr, dn, root, env, bike)
 	gfx.apply(0)
 	check("gráficos: qualidade baixa desliga sombras e reduz alcance", (not sun.shadow_enabled) and cam.far < 150.0 and tmgr.active_range < 80.0 and gfx.traffic_cap() == 8)
 	gfx.apply(2)
 	check("gráficos: qualidade alta liga sombras", sun.shadow_enabled and cam.far > 250.0 and gfx.traffic_cap() == 30)
+	gfx.configure(0.5, 150, 1, false)
+	gfx.apply(2)
+	check("gráficos: resolução, distância, sombras e efeitos do jogador valem sobre o nível", is_equal_approx(root.scaling_3d_scale, 0.5) and is_equal_approx(cam.far, 150.0) and (not sun.shadow_enabled) and (not env.fog_enabled) and not bike.effects_enabled)
+	gfx.configure(0.0, 0, 0, true)
+	gfx.apply(2)
+	check("gráficos: voltar ao automático restaura o nível", sun.shadow_enabled and cam.far > 250.0 and env.fog_enabled and bike.effects_enabled)
 	check("gráficos: configuração manual escolhe o nível", GraphicsManager.level_for_setting(1) == 0 and GraphicsManager.level_for_setting(3) == 2)
 	var guard := PerformanceGuard.new()
 	holder.add_child(guard)
@@ -800,6 +982,13 @@ func _test_rider_model() -> void:
 	check("animação de caminhar move os pés", not (a["foot_l"] as Vector3).is_equal_approx(b["foot_l"]))
 	var run_pose := Pedestrian.walk_pose(PI / 2.0, 1.0, 1.0)
 	check("animação de correr tem passada maior que a de andar", absf((run_pose["foot_l"] as Vector3).z) > absf((b["foot_l"] as Vector3).z))
+	h.set_bag_visible(true)
+	var lean_pose := Pedestrian._stand()
+	lean_pose["chest"] = Vector3(0.3, 1.4, -0.1)
+	h.pose(lean_pose)
+	var bag_origin := h.bag_node.transform.origin
+	check("bag: fica entre o quadril e o peito e acompanha o tronco inclinado", bag_origin.x > 0.1 and bag_origin.y > 1.0 and bag_origin.y < 1.3)
+	check("bag: fica atrás (nas costas) do personagem", (h.bag_node.transform * Vector3(0, 0, 0.27)).z > bag_origin.z + 0.2)
 	hn.free()
 	for id in BikeCatalog.ids():
 		var prof := BikeCatalog.load_profile(id)
@@ -814,6 +1003,7 @@ func _test_rider_model() -> void:
 				if absf(gp.x) < 0.2 and gp.y > 1.2 and gp.y < 1.55 and gp.z > -0.65 and gp.z < -0.15:
 					stray += 1
 		check("moto %s: sem peça colorida solta no peito do piloto" % id, stray == 0)
+		check("moto %s: o modelo não tem mais bag presa à moto" % id, not parts.has("bag"))
 		holder.free()
 
 
@@ -873,6 +1063,9 @@ func _test_reverse_fall_foot() -> void:
 	bike.finish_lift()
 	check("queda: depois de levantada a moto fica em pé e estacionada", (not bike.fallen) and bike.parked and absf(bike.lean) < 0.05)
 
+	ped.set_carrying(true)
+	check("bag: o personagem a pé leva a bag nas costas", ped.human.bag_node.visible)
+	ped.set_carrying(false)
 	ped.reset_beside(Vector3(20, 0.1, 20), 0.0)
 	await _frames(10)
 	var p0 := ped.global_position
@@ -916,34 +1109,84 @@ func _test_phone_ui() -> void:
 	var ph := PhoneUi.new()
 	root.add_child(ph)
 	await _frames(2)
-	var events := {"apps": [], "closed": 0}
-	ph.app_pressed.connect(func(a): events["apps"].append(a))
+	var events := {"closed": 0, "actions": []}
 	ph.closed.connect(func(): events["closed"] += 1)
+	ph.action_requested.connect(func(a): events["actions"].append(a))
 	check("celular: começa escondido", not ph.visible)
+	check("celular: tela inicial e tela de aplicativo são imagens diferentes", ph._tex_home != ph._tex_app and ph._tex_home != null and ph._tex_app != null)
 	ph.open()
-	check("celular: começa abaixo da borda da tela", ph.phone_rect().position.y >= ph.size.y)
+	ph._process(0.0)
+	check("celular: começa abaixo da borda da tela", ph.screen_rect().position.y >= ph.size.y)
 	for i in 3:
 		ph._process(0.2)
-	var r := ph.phone_rect()
-	check("celular: depois de subir fica todo visível do lado direito", ph.shown >= 1.0 and r.position.x > ph.size.x * 0.5 and r.position.y >= 0.0 and r.end.y <= ph.size.y and r.end.x <= ph.size.x)
-	var xc := ph.close_center()
-	check("celular: o X fica no canto superior direito", xc.x > r.position.x + r.size.x * 0.8 and xc.y < r.position.y + r.size.y * 0.2)
-	for app in PhoneUi.APPS:
-		var ev := InputEventMouseButton.new()
-		ev.button_index = MOUSE_BUTTON_LEFT
-		ev.pressed = true
-		ev.position = ph.app_center(app)
-		ph._gui_input(ev)
-	var apps: Array = events["apps"]
-	check("celular: cada um dos 6 ícones dispara a sua função", apps.size() == 6 and apps.has("mapa") and apps.has("entregas") and apps.has("corridas") and apps.has("configuracoes") and apps.has("ligacoes") and apps.has("camera"))
-	var xev := InputEventMouseButton.new()
-	xev.button_index = MOUSE_BUTTON_LEFT
-	xev.pressed = true
-	xev.position = xc
-	ph._gui_input(xev)
+	var r := ph.screen_rect()
+	check("celular: depois de subir fica todo visível do lado direito", ph.shown >= 1.0 and r.position.x > ph.size.x * 0.5 and r.position.y >= -1.0 and r.end.y <= ph.size.y + 1.0 and r.end.x <= ph.size.x + 1.0)
+	check("celular: o X fica no canto superior direito do aparelho", PhoneUi.CLOSE_CENTER.x > PhoneUi.BASE.x * 0.8 and PhoneUi.CLOSE_CENTER.y < PhoneUi.BASE.y * 0.2)
+	ph._on_device_input(_tap(ph.app_center("camera")))
+	check("celular: o ícone Câmera dispara a foto sem sair da tela inicial", events["actions"] == ["camera"] and ph.app == "")
+	ph._on_device_input(_tap(PhoneUi.CLOSE_CENTER))
 	for i in 3:
 		ph._process(0.2)
 	check("celular: tocar no X fecha e o celular desce", events["closed"] == 1 and not ph.visible)
-	check("celular: imagens do celular e do botão carregam", load("res://assets/ui/phone.png") is Texture2D and load("res://assets/ui/phone_button.png") is Texture2D)
+	check("celular: imagens do celular e do botão carregam", load("res://assets/ui/phone.png") is Texture2D and load("res://assets/ui/phone_button.png") is Texture2D and load("res://assets/ui/phone_app.png") is Texture2D)
 	ph.queue_free()
 	await _frames(2)
+
+
+func _tap(pos: Vector2) -> InputEventMouseButton:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	ev.position = pos
+	return ev
+
+
+func _button_texts(n: Node) -> Array:
+	var out: Array = []
+	if n is Button:
+		out.append((n as Button).text)
+	for c in n.get_children():
+		out.append_array(_button_texts(c))
+	return out
+
+
+func _find_button(n: Node, wanted: String, contains: bool) -> Button:
+	if n is Button:
+		var t := (n as Button).text
+		if (contains and t.contains(wanted)) or ((not contains) and t == wanted):
+			return n as Button
+	for c in n.get_children():
+		var found := _find_button(c, wanted, contains)
+		if found != null:
+			return found
+	return null
+
+
+func _unique(arr: Array) -> int:
+	var seen := {}
+	for v in arr:
+		seen[str(v)] = true
+	return seen.size()
+
+
+func _test_minimap_arrow() -> void:
+	var tracked := Node3D.new()
+	root.add_child(tracked)
+	tracked.global_position = Vector3(30, 0, -20)
+	var gmap := Minimap.new()
+	gmap.size = Vector2(840, 480)
+	gmap.zoom_m = 215.0
+	gmap.fixed_center = true
+	gmap.bike = tracked
+	gmap.info = {"half": 100.0, "road_w": 12.0, "roads": [], "pois": []}
+	var k := 840.0 / 215.0
+	check("mapa: a seta fica na posição real do personagem", gmap.player_map_pos().distance_to(Vector2(420, 240) + Vector2(30, -20) * k) < 0.01)
+	var before := gmap.player_map_pos()
+	tracked.global_position = Vector3(-50, 0, 40)
+	check("mapa: a seta acompanha o personagem quando ele se move", gmap.player_map_pos().distance_to(Vector2(420, 240) + Vector2(-50, 40) * k) < 0.01 and not gmap.player_map_pos().is_equal_approx(before))
+	gmap.fixed_center = false
+	gmap.clamp_to_world = true
+	tracked.global_position = Vector3(95, 0, 20)
+	check("mapa: com a vista seguindo o jogador a seta continua coerente com o mundo", gmap.player_map_pos().distance_to(gmap._w2m(Vector3(95, 0, 20))) < 0.01)
+	gmap.free()
+	tracked.free()

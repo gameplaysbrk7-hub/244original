@@ -18,6 +18,7 @@ const MOUNT_TIME := 0.55
 const TUMBLE_TIME := 1.1
 const GETUP_TIME := 1.0
 const LIFT_TIME := 1.7
+const PHONE_TIME := 0.55
 
 var state: int = State.WALK
 var human: Humanoid
@@ -27,6 +28,8 @@ var view_yaw: float = 0.0
 var speed: float = 0.0
 var yaw: float = 0.0
 var lift_progress: float = 0.0
+var phone_target: bool = false   # true: tirar/segurar o celular; false: guardar no bolso
+var carrying: bool = false
 
 var _phase: float = 0.0
 var _last_step: int = 0
@@ -38,6 +41,7 @@ var _yaw_to: float = 0.0
 var _slide: Vector3 = Vector3.ZERO
 var _spin: float = 0.0
 var _bike: Node3D
+var _phone_t: float = 0.0
 
 
 func _ready() -> void:
@@ -189,6 +193,20 @@ func reset_beside(pos: Vector3, bike_yaw: float) -> void:
 	speed = 0.0
 
 
+func set_carrying(on: bool) -> void:
+	carrying = on
+	human.set_bag_visible(on)
+
+
+## Posição da mão direita: do balanço normal até o bolso e do bolso até a frente do peito.
+func _phone_hand(base: Vector3, t: float) -> Vector3:
+	var pocket := Vector3(0.3, 0.82, 0.08)
+	var hold := Vector3(0.2, 1.22, -0.32)
+	if t < 0.4:
+		return base.lerp(pocket, t / 0.4)
+	return pocket.lerp(hold, smoothstep(0.0, 1.0, (t - 0.4) / 0.6))
+
+
 func can_act() -> bool:
 	return state == State.WALK
 
@@ -198,6 +216,9 @@ func can_act() -> bool:
 func _physics_process(delta: float) -> void:
 	if not visible:
 		return
+	if state != State.WALK:
+		_phone_t = 0.0
+		human.set_phone_visible(false)
 	match state:
 		State.WALK:
 			_walk(delta)
@@ -306,4 +327,10 @@ func _walk(delta: float) -> void:
 	var p := walk_pose(_phase, run_blend, moving)
 	if moving < 0.2:
 		p["chest"] = (p["chest"] as Vector3) + Vector3(0, 0.006 * sin(Time.get_ticks_msec() * 0.003), 0)
+	_phone_t = move_toward(_phone_t, 1.0 if phone_target else 0.0, delta / PHONE_TIME)
+	if _phone_t > 0.0:
+		p["hand_r"] = _phone_hand(p["hand_r"], _phone_t)
+		p["chest"] = (p["chest"] as Vector3) + Vector3(0, 0, -0.03) * _phone_t
+		p["head"] = (p["head"] as Vector3) + Vector3(0, -0.02, -0.04) * _phone_t
+	human.set_phone_visible(_phone_t > 0.42)
 	human.pose(p)

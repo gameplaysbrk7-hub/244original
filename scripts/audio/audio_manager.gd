@@ -20,6 +20,7 @@ var _crash: AudioStreamWAV
 var _click: AudioStreamWAV
 var _step: AudioStreamWAV
 var _shutter: AudioStreamWAV
+var _keys: Dictionary = {}
 var _success: AudioStreamWAV
 var _fail: AudioStreamWAV
 var _rpm: float = 0.2
@@ -141,6 +142,13 @@ func play_fail() -> void:
 
 func play_step(running: bool) -> void:
 	_play(_step, -9.0 if running else -13.0, randf_range(0.9, 1.15))
+
+
+func play_key(key: String) -> void:
+	if not _keys.has(key):
+		_keys[key] = SoundBank.dtmf(key)
+	_ui.stream = _keys[key]
+	_ui.play()
 
 
 func play_shutter() -> void:

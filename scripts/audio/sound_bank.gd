@@ -93,6 +93,26 @@ static func step() -> AudioStreamWAV:
 	return _stream(out, false)
 
 
+const DTMF_ROWS := [697.0, 770.0, 852.0, 941.0]
+const DTMF_COLS := [1209.0, 1336.0, 1477.0]
+
+
+## Tom de tecla de telefone (duas frequências, como um teclado real).
+static func dtmf(key: String) -> AudioStreamWAV:
+	var keys := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"]
+	var idx := maxi(0, keys.find(key))
+	var f1: float = DTMF_ROWS[idx / 3]
+	var f2: float = DTMF_COLS[idx % 3]
+	var n := int(RATE * 0.18)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var env := minf(1.0, t * 200.0) * minf(1.0, (0.18 - t) * 40.0)
+		out[i] = (sin(TAU * f1 * t) + sin(TAU * f2 * t)) * 0.28 * env
+	return _stream(out, false)
+
+
 static func shutter() -> AudioStreamWAV:
 	var n := int(RATE * 0.22)
 	var out := PackedFloat32Array()

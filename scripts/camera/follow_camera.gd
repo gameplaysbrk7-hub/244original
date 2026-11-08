@@ -15,6 +15,8 @@ var yaw_offset: float = 0.0
 var orbit_sensitivity: float = 0.35  # graus por pixel
 var first_person: bool = false
 var showroom: bool = false
+var head_node: Node3D           # 1ª pessoa: nó da cabeça que a câmera acompanha
+var fp_roll: float = 0.0        # inclinação lateral na 1ª pessoa (curvas)
 var free_orbit: bool = false   # a pé: a câmera não gira sozinha com o personagem
 var showroom_distance: float = 3.6
 var view_pitch: float = 0.0  # inclinação da moto (grau/stoppie), usada na 1ª pessoa
@@ -90,7 +92,7 @@ func _physics_process(delta: float) -> void:
 	if showroom:
 		_update_showroom(delta)
 		return
-	if first_person and not free_orbit:
+	if first_person:
 		_update_first_person()
 		return
 	var target_yaw := target.global_rotation.y
@@ -130,13 +132,19 @@ func _physics_process(delta: float) -> void:
 
 
 func _update_first_person() -> void:
-	var yaw := target.global_rotation.y
-	var head_local := Basis(Vector3.RIGHT, view_pitch) * Vector3(0.0, 1.68, -0.72)
-	var head := target.global_position + Basis(Vector3.UP, yaw) * head_local
-	var look_yaw := clampf(yaw_offset, -1.6, 1.6)
-	var look_pitch := deg_to_rad(clampf((pitch_deg - DEFAULT_PITCH) * 0.5, -20.0, 30.0))
-	var b := Basis(Vector3.UP, yaw + look_yaw) * Basis(Vector3.RIGHT, view_pitch * 0.7 - look_pitch)
-	camera.global_transform = Transform3D(b, head)
+	var head: Vector3
+	if is_instance_valid(head_node):
+		head = head_node.global_position      # cabeça real do personagem: inclina, balança e gira com ele
+	else:
+		head = target.global_position + Vector3(0.0, 1.68, 0.0)
+	var yaw: float
+	if free_orbit:
+		yaw = yaw_offset                      # a pé: o jogador olha para onde girar a câmera
+	else:
+		yaw = target.global_rotation.y + clampf(yaw_offset, -1.6, 1.6)
+	var look_pitch := deg_to_rad(clampf((pitch_deg - DEFAULT_PITCH) * 0.5, -35.0, 45.0))
+	var b := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, view_pitch * 0.7 - look_pitch) * Basis(Vector3.FORWARD, fp_roll)
+	camera.global_transform = Transform3D(b, head + b * Vector3(0.0, 0.03, -0.12))
 
 
 func _update_showroom(delta: float) -> void:

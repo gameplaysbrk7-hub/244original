@@ -4,6 +4,7 @@ extends Control
 var zoom_m: float = 130.0        # metros mostrados na largura
 var fixed_center: bool = false   # true: mapa grande centrado na cidade
 var show_names: bool = false     # true: escreve o nome dos pontos de interesse
+var clamp_to_world: bool = false # true: a vista segue o jogador mas não passa das bordas da cidade
 
 var bike: Node3D
 var traffic: Node
@@ -18,8 +19,26 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+func _center() -> Vector3:
+	if fixed_center:
+		return Vector3.ZERO
+	var c := bike.global_position
+	if clamp_to_world:
+		var world_half: float = float(info.get("half", 100.0))
+		var lim_x := maxf(0.0, world_half - zoom_m * 0.5)
+		var lim_z := maxf(0.0, world_half - zoom_m * size.y / size.x * 0.5)
+		c.x = clampf(c.x, -lim_x, lim_x)
+		c.z = clampf(c.z, -lim_z, lim_z)
+	return c
+
+
+## Posição da seta do jogador no mapa (usa a posição real do personagem no mundo).
+func player_map_pos() -> Vector2:
+	return _w2m(bike.global_position)
+
+
 func _w2m(p: Vector3) -> Vector2:
-	var c := Vector3.ZERO if fixed_center else bike.global_position
+	var c := _center()
 	return size * 0.5 + Vector2(p.x - c.x, p.z - c.z) * (size.x / zoom_m)
 
 
@@ -57,6 +76,8 @@ func _draw() -> void:
 	var yaw := bike.global_rotation.y
 	var f := Vector2(-sin(yaw), -cos(yaw))
 	var perp := Vector2(-f.y, f.x)
-	var c := size * 0.5
-	draw_colored_polygon(PackedVector2Array([c + f * 11.0, c - f * 6.0 + perp * 6.0, c - f * 6.0 - perp * 6.0]), Color(1.0, 0.9, 0.2))
+	var c := player_map_pos()
+	var k := 1.0 if size.x < 300.0 else 1.7
+	draw_colored_polygon(PackedVector2Array([c + f * 11.0 * k, c - f * 6.0 * k + perp * 6.0 * k, c - f * 6.0 * k - perp * 6.0 * k]), Color(1.0, 0.9, 0.2))
+	draw_polyline(PackedVector2Array([c + f * 11.0 * k, c - f * 6.0 * k + perp * 6.0 * k, c - f * 6.0 * k - perp * 6.0 * k, c + f * 11.0 * k]), Color.BLACK, 2.0)
 	draw_rect(Rect2(Vector2.ZERO, size), Color.WHITE, false, 2.0)

@@ -28,16 +28,20 @@ static func find(id: String) -> Dictionary:
 	return {}
 
 
-## Monta uma entrega sorteada: tempo e recompensa dependem da distância (em linha reta).
-static func make_delivery(from_id: String, to_id: String, from_name: String, to_name: String, distance: float) -> Dictionary:
-	var reward := int(round((100.0 + distance * 2.5) / 10.0)) * 10
+## Monta uma oferta de entrega: tempo e pagamento dependem da distância do trajeto (e da retirada).
+static func make_delivery(from_id: String, to_id: String, from_name: String, to_name: String, route_dist: float, pickup_dist: float) -> Dictionary:
+	var reward := int(round((100.0 + route_dist * 2.5 + pickup_dist * 0.5) / 10.0)) * 10
 	return {
 		"id": "entrega_%s_%s" % [from_id, to_id],
 		"type": "delivery",
 		"title": "Entrega para %s" % to_name,
-		"desc": "Leve o pedido da %s até a %s e toque em ENTREGAR." % [from_name, to_name],
+		"desc": "Retire na %s (botão COLETAR) e entregue na %s pelo app Entregas." % [from_name, to_name],
 		"from": from_id,
 		"to": to_id,
-		"time": 45.0 + distance * 0.3,
+		"from_name": from_name,
+		"to_name": to_name,
+		"route": route_dist,
+		"pickup": pickup_dist,
+		"time": 60.0 + (route_dist + pickup_dist) * 0.3,
 		"reward": reward,
 	}

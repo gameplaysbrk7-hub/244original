@@ -49,6 +49,7 @@ var lift_t: float = 0.0
 var crash_velocity: Vector3 = Vector3.ZERO
 var rider_on_bike: bool = true
 var skid_level: float = 0.0      # intensidade de derrapagem/frenagem (usada pelo áudio)
+var effects_enabled: bool = true   # fumaça dos pneus (opção Efeitos visuais)
 var carrying: bool = false     # levando um pedido (mostra a bolsa de entrega)
 var fall_timer: float = 0.0
 var fall_side: float = 1.0
@@ -192,8 +193,13 @@ func finish_lift() -> void:
 
 func set_carrying(on: bool) -> void:
 	carrying = on
-	if parts.has("bag"):
-		(parts["bag"] as Node3D).visible = on
+	if _rider != null:
+		_rider.set_bag_visible(on)
+
+
+## Cabeça do piloto (a câmera em 1ª pessoa acompanha este nó).
+func rider_head() -> Node3D:
+	return _rider.head_node if _rider != null else null
 
 
 func set_headlight(on: bool) -> void:
@@ -230,9 +236,9 @@ func _build_visuals() -> void:
 	_front_wheel = parts["front_wheel"]
 	_rear_wheel = parts["rear_wheel"]
 	BikeModel.apply_custom(parts, custom)
-	(parts["bag"] as Node3D).visible = carrying
 	_rider = Humanoid.new()
 	_rider.build(_lean_pivot)
+	_rider.set_bag_visible(carrying)
 	_rider_base = BikeModel.rider_pose(profile)
 	_rider_cur = _rider_base.duplicate()
 	_rider.pose(_rider_cur)
@@ -500,7 +506,7 @@ func _update_visuals(delta: float) -> void:
 	_rear_wheel.rotation.x -= spin + (30.0 * delta if burnout else 0.0)
 	var steer_visual := -clampf(input_steer, -1.0, 1.0) * 0.35
 	_fork.rotation.y = lerpf(_fork.rotation.y, steer_visual, 1.0 - exp(-12.0 * delta))
-	_smoke.emitting = burnout or drifting
+	_smoke.emitting = (burnout or drifting) and effects_enabled
 	_update_rider(delta)
 
 

@@ -11,6 +11,8 @@ const FORE := 0.34
 
 var root: Node3D
 var head_node: Node3D
+var bag_node: Node3D     # bag de entregas, presa às costas (acompanha o tronco)
+var phone_node: Node3D   # celular na mão direita
 
 var _limbs: Dictionary = {}
 var _hands: Dictionary = {}
@@ -81,12 +83,63 @@ func build(parent: Node3D, jacket_color: Color = Color(0.1, 0.3, 0.75)) -> void:
 	stripe.material_override = jacket
 	stripe.position = Vector3(0, 0.15, 0)
 	head_node.add_child(stripe)
+	_build_bag()
+	_build_phone()
+
+
+func set_bag_visible(on: bool) -> void:
+	bag_node.visible = on
+
+
+func set_phone_visible(on: bool) -> void:
+	phone_node.visible = on
+
+
+func _build_bag() -> void:
+	bag_node = Node3D.new()
+	root.add_child(bag_node)
+	var red := _mat(Color(0.82, 0.1, 0.08), 0.6)
+	var yellow := _mat(Color(1.0, 0.82, 0.1), 0.6)
+	var dark := _mat(Color(0.06, 0.06, 0.07), 0.8)
+	_box_child(bag_node, Vector3(0.38, 0.44, 0.26), Vector3(0, 0.02, 0.27), red)
+	_box_child(bag_node, Vector3(0.40, 0.07, 0.28), Vector3(0, 0.26, 0.27), yellow)
+	_box_child(bag_node, Vector3(0.40, 0.08, 0.27), Vector3(0, 0.02, 0.27), yellow)
+	for sx in [-1.0, 1.0]:
+		_box_child(bag_node, Vector3(0.05, 0.46, 0.03), Vector3(0.12 * sx, 0.02, -0.16), dark)
+	bag_node.visible = false
+
+
+func _build_phone() -> void:
+	phone_node = Node3D.new()
+	(_hands["r"] as Node3D).add_child(phone_node)
+	phone_node.position = Vector3(0, 0.03, -0.05)
+	phone_node.rotation = Vector3(-0.5, 0, 0)
+	_box_child(phone_node, Vector3(0.07, 0.15, 0.012), Vector3.ZERO, _mat(Color(0.12, 0.12, 0.14), 0.4))
+	var screen := _mat(Color(0.2, 0.45, 1.0), 0.3)
+	screen.emission_enabled = true
+	screen.emission = Color(0.2, 0.45, 1.0)
+	_box_child(phone_node, Vector3(0.062, 0.138, 0.002), Vector3(0, 0, 0.0075), screen)
+	phone_node.visible = false
+
+
+func _box_child(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.material_override = mat
+	mi.position = pos
+	parent.add_child(mi)
 
 
 func pose(p: Dictionary) -> void:
 	var hip: Vector3 = p["hip"]
 	var chest: Vector3 = p["chest"]
 	_set_limb(_limbs["torso"], hip, chest)
+	if bag_node.visible:
+		var dn := (chest - hip).normalized()
+		var back := Vector3.RIGHT.cross(dn).normalized()
+		bag_node.transform = Transform3D(Basis(Vector3.RIGHT, dn, back).orthonormalized(), (hip + chest) * 0.5)
 	_pelvis.position = hip + Vector3(0, -0.02, 0)
 	head_node.position = p["head"]
 	head_node.rotation.y = float(p.get("head_yaw", 0.0))

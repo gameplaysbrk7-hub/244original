@@ -430,16 +430,6 @@ static func _extras(ctx: Dictionary) -> void:
 	_add(topcase, _box(Vector3(0.4, 0.3, 0.42)), Vector3(0, tail_top + 0.22, tail_z + 0.1), mats["dark"])
 	_add(topcase, _box(Vector3(0.3, 0.04, 0.34)), Vector3(0, tail_top + 0.39, tail_z + 0.1), mats["body"])
 	parts["topcase"] = topcase
-	# Bolsa de entrega (aparece durante entregas)
-	var bag := Node3D.new()
-	root.add_child(bag)
-	var red := _mat(Color(0.82, 0.1, 0.08), 0.6)
-	var yellow := _mat(Color(1.0, 0.82, 0.1), 0.6)
-	_add(bag, _box(Vector3(0.44, 0.42, 0.46)), Vector3(0, tail_top + 0.26, tail_z + 0.12), red)
-	_add(bag, _box(Vector3(0.46, 0.05, 0.48)), Vector3(0, tail_top + 0.43, tail_z + 0.12), yellow)
-	_add(bag, _box(Vector3(0.46, 0.08, 0.1)), Vector3(0, tail_top + 0.26, tail_z + 0.12), yellow)
-	bag.visible = false
-	parts["bag"] = bag
 
 
 static func _mirrors(fork: Node3D, mats: Dictionary, round_mirror: bool, parts: Dictionary) -> void:

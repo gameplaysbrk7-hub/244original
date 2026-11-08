@@ -10,14 +10,20 @@ tudo é gerado proceduralmente.
 
 ## O que já existe
 
-### Celular
-- **Botão do celular** (só a imagem, sem texto) fica na parte de baixo da tela, na moto e a pé. Ao tocar, o **celular sobe da borda da tela** e fica inteiro visível do lado direito; o jogo pausa. Para fechar, toque no pequeno **X** no canto superior direito do celular (ele desce). Tecla P no teclado
-- **Mapa**: mapa grande da cidade com nomes (garagem, oficina, posto, treino, hamburguerias, casas), carros, sua posição e o objetivo
-- **Entregas**: mostra a entrega em andamento (de onde, para onde, distância, direção, tempo, recompensa) ou as hamburguerias mais próximas; abre o mapa
-- **Corridas**: lista dos desafios de grau e percursos com checkpoints
-- **Configurações**: abre as configurações **direto pelo celular**; o botão Configurações **não existe mais no menu de pausa** (só na tela inicial, que não tem celular). Voltar retoma o jogo
-- **Ligações**: **guincho** (R$ 100) traz a moto até você quando está a pé
-- **Câmera**: tira uma foto da tela sem a interface (tenta salvar na pasta Imagens do aparelho, em GCMotoGrau; se o Android não permitir, salva na pasta privada do jogo `user://fotos`)
+### Celular (v1.4)
+- **Botão do celular** (só a imagem, sem texto) na parte de baixo da tela, na moto e a pé. Toque: o celular **sobe da borda inferior** e fica inteiro visível do lado direito. O **X** pequeno no canto superior direito fecha (o celular desce). Tecla P no teclado
+- **Em tempo real**: abrir o celular ou qualquer app **não pausa** o jogo (trânsito, física, relógio, entregas e corridas continuam). Só o botão **PAUSA** pausa. (Exceção: o editor de reposicionar botões pausa, para ninguém bater a moto enquanto arrasta.) Toques sobre o aparelho não controlam o jogo
+- **Duas imagens**: tela inicial com os ícones e, ao abrir qualquer app, troca na hora para a imagem de **fundo preto**; o app aparece **dentro da tela do aparelho**. A imagem de fundo preto foi **gerada a partir da sua imagem original** (`assets/ui/phone_app.png`); se quiser, troque pelo arquivo do seu design (mesmo tamanho, 555x1041)
+- **HOME** (círculo da barra de navegação) volta à tela inicial em qualquer app; o triângulo volta uma etapa dentro do app
+- **Mapa**: o celular se aproxima da câmera e **gira 90 graus** até ocupar a tela, na horizontal; mapa grande com nomes, a vista segue o jogador. A **seta amarela** agora fica na posição real do personagem (a pé ou na moto) e mostra a direção. HOME desfaz a rotação e o zoom gradualmente
+- **Entregas** (estilo app de delivery): **uma oferta por vez** com **ACEITAR** e **RECUSAR** (recusar sorteia outra, sem repetir as recusadas recentes). Painel com **entregas concluídas**, **total recebido só com entregas** e entregas da **sessão** (desde que o jogo foi aberto). Fluxo: aceitar -> o mapa aponta a hamburgueria -> botão de interação **COLETAR** -> ir ao cliente -> abrir o celular em Entregas -> **ENTREGAR** (aparece só no endereço certo). A entrega **não** usa mais o botão do mundo e **nada é automático**
+- **Corridas**: mesma estrutura (oferta única, ACEITAR/RECUSAR, aleatória), com **estatísticas e ganhos próprios**, separados das entregas. Usa os desafios de grau e os percursos com checkpoints que já existiam
+- **Configurações** (estilo smartphone, com ícones e subpáginas): **Gráficos** (qualidade, resolução, distância de renderização, sombras, efeitos visuais), **Controles** (reposicionar botões, tamanho, sensibilidade da direção e da câmera, opacidade), **Áudio** (geral, motor e efeitos, ambiente; o jogo ainda não tem música) e **Jogabilidade** (trânsito, duração do dia, 1ª pessoa, minimapa). Tudo age de verdade e fica salvo
+- **Telefone**: teclado de discador (0-9, *, #) com **tons de tecla** e resposta visual (os números não aparecem) e o contato **GUINCHO** com o valor realmente cobrado; ao tocar, aciona o guincho e **fecha o celular**
+- **Câmera**: tira foto da tela sem interface (Imagens do aparelho, pasta GCMotoGrau; se o Android não permitir, salva em `user://fotos`)
+- **Animação a pé**: ao abrir o celular fora da moto o personagem **tira o celular do bolso** e o segura; ao fechar, **guarda no bolso**. Na moto não há essa animação
+- **Primeira pessoa**: a câmera acompanha a **cabeça real** do personagem (inclina, balança ao andar, gira), tanto pilotando quanto a pé; o capacete some só nessa visão
+- **Bag de entregas**: agora fica **nas costas do personagem** (acompanha o tronco, sobe e desce da moto com ele, aparece a pé), não mais presa à moto
 
 ### Ré, andar a pé e queda
 - **Ré**: com a moto parada, toque no **freio traseiro** (um toque novo, sem estar freando em movimento) e a moto anda de ré devagar. O piloto apoia os **pés no chão** e dá passos, olhando para trás. O HUD mostra "RÉ". Na moto parada o piloto também apoia um pé no chão
@@ -37,8 +43,8 @@ tudo é gerado proceduralmente.
 
 ### Ajustes recentes
 - **Trânsito corrigido:** os carros agora circulam pelas ruas (mão direita, semáforos, curvas nos cruzamentos). A detecção de obstáculos passou a ser por geometria simples (sem consultas de física) e carros parados sem motivo por mais de 10 s são reposicionados
-- **Botão de interação (substitui o EQUIL):** aparece só quando você está **parado sobre um acionador** (marcador no chão) e muda de nome: **GARAGEM** (na garagem, abre a garagem direto, sem passar pela pausa), **ENTREGA** (numa HAMBURGUERIA, sorteia uma entrega) e **ENTREGAR** (na casa de destino, conclui a entrega). Nada é automático: chegar na casa não entrega sozinho, é preciso tocar em ENTREGAR
-- **Entregas sorteadas:** em cada **HAMBURGUERIA** (prédio com letreiro, toldo vermelho e hambúrguer gigante no telhado, marcador **H** no minimapa) o botão ENTREGA sorteia uma das **casas** (CASA 1 a 8, marcador **C**, a pelo menos 50 m). Tempo e recompensa dependem da distância; repetir o mesmo trajeto paga 40%. A moto leva uma bolsa vermelha durante a entrega; funciona também a pé
+- **Botão de interação (substitui o EQUIL):** aparece só quando você está **parado sobre um acionador** (marcador no chão) e muda de nome: **GARAGEM** (na garagem, abre a garagem direto, sem passar pela pausa), **COLETAR** (na hamburgueria da entrega aceita no app Entregas). A conclusão da entrega é feita pelo botão ENTREGAR dentro do app
+- **Entregas:** o pedido é retirado numa **HAMBURGUERIA** (prédio com letreiro, toldo vermelho e hambúrguer gigante no telhado, marcador **H** no minimapa) o botão ENTREGA sorteia uma das **casas** (CASA 1 a 8, marcador **C**, a pelo menos 50 m). Tempo e recompensa dependem da distância; repetir o mesmo trajeto paga 40%. A moto leva uma bolsa vermelha durante a entrega; funciona também a pé
 - **Motos redesenhadas** (veja a garagem abaixo) e **grau pelo analógico** (sem botão GRAU)
 
 ### Novidades da Fase 4

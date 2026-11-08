@@ -24,6 +24,8 @@ var drift: bool = false
 var ui_opacity: float = 0.55
 var offsets: Dictionary = {}     # id do botão -> Vector2 (fração da tela)
 var edit_mode: bool = false
+var blocked_rect: Rect2 = Rect2()   # área ocupada pelo celular: toques ali não controlam o jogo
+var control_scale: float = 1.0
 var foot_mode: bool = false     # a pé: mostra CORRER e SUBIR/LEVANTAR e esconde os botões da moto
 var mount_label: String = "DESCER"
 var interact_label: String = ""   # nome variável do botão de interação (vazio = botão escondido)
@@ -54,7 +56,7 @@ func _unit() -> float:
 
 func _layout() -> Dictionary:
 	var s := get_viewport_rect().size
-	var r := _unit() * 0.12
+	var r := _unit() * 0.12 * control_scale
 	var out: Dictionary = _foot_buttons(s, r) if foot_mode else _riding_buttons(s, r)
 	for id in out:
 		if offsets.has(id):
@@ -116,6 +118,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _on_press(idx: int, pos: Vector2) -> void:
+	if blocked_rect.size != Vector2.ZERO and blocked_rect.has_point(pos):
+		return
 	if edit_mode:
 		_edit_press(idx, pos)
 		return
@@ -179,7 +183,7 @@ func _on_drag(idx: int, pos: Vector2, relative: Vector2) -> void:
 		return
 	var kind: String = _touches[idx]
 	if kind == "stick":
-		var radius := _unit() * 0.15
+		var radius := _unit() * 0.15 * control_scale
 		var delta := pos - _stick_origin
 		if delta.length() > radius:
 			_stick_origin = pos - delta.normalized() * radius
@@ -301,7 +305,7 @@ func _draw() -> void:
 
 	var s := get_viewport_rect().size
 	var u := _unit()
-	var sr := u * 0.15
+	var sr := u * 0.15 * control_scale
 	var active := held.has("stick")
 	var base := _stick_origin if active else Vector2(2.0 * u * 0.12 + sr * 0.2, s.y - 1.8 * u * 0.12)
 	draw_arc(base, sr, 0.0, TAU, 48, Color(1, 1, 1, ui_opacity * 0.8), 4.0)

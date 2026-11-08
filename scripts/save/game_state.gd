@@ -18,6 +18,7 @@ var unlocked_bikes: Array = ["starter"]
 var owned_items: Array = []
 var bike_custom: Dictionary = {}   # id da moto -> {chave: valor}; cores como "#rrggbb"
 var completed: Dictionary = {}     # id da missão -> vezes concluída
+var stats: Dictionary = {"deliveries": 0, "delivery_earned": 0, "races": 0, "race_earned": 0}
 var _claimed_runs: Dictionary = {} # execuções de missão que já pagaram (só em memória)
 
 
@@ -40,6 +41,7 @@ func reset_defaults() -> void:
 	owned_items = []
 	bike_custom = {}
 	completed = {}
+	stats = {"deliveries": 0, "delivery_earned": 0, "races": 0, "race_earned": 0}
 
 
 # ------------------------------------------------------------------ economia
@@ -75,6 +77,17 @@ func buy_item(id: String, price: int) -> bool:
 	owned_items.append(id)
 	save_game()
 	return true
+
+
+## Registra uma missão concluída nas estatísticas do app certo (entregas e corridas não se misturam).
+func record_stat(kind: String, amount: int) -> void:
+	if kind == "delivery":
+		stats["deliveries"] = int(stats["deliveries"]) + 1
+		stats["delivery_earned"] = int(stats["delivery_earned"]) + amount
+	elif kind == "race":
+		stats["races"] = int(stats["races"]) + 1
+		stats["race_earned"] = int(stats["race_earned"]) + amount
+	save_game()
 
 
 ## Paga a recompensa de uma execução de missão uma única vez.
@@ -126,6 +139,7 @@ func to_data() -> Dictionary:
 		"owned_items": owned_items,
 		"bike_custom": bike_custom,
 		"completed": completed,
+		"stats": stats,
 	}
 
 
@@ -203,6 +217,11 @@ func _apply_data(d: Dictionary) -> bool:
 		for k in comp:
 			if typeof(comp[k]) == TYPE_FLOAT or typeof(comp[k]) == TYPE_INT:
 				completed[str(k)] = maxi(0, int(comp[k]))
+	var st: Variant = d.get("stats", {})
+	stats = {"deliveries": 0, "delivery_earned": 0, "races": 0, "race_earned": 0}
+	if typeof(st) == TYPE_DICTIONARY:
+		for k in stats:
+			stats[k] = maxi(0, _int(st, str(k), 0))
 	return true
 
 

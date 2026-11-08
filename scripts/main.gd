@@ -22,10 +22,10 @@ const GraphicsManager := preload("res://scripts/core/graphics_manager.gd")
 const PerformanceGuard := preload("res://scripts/core/performance_guard.gd")
 const Pedestrian := preload("res://scripts/player/pedestrian.gd")
 const PhoneUi := preload("res://scripts/ui/phone_ui.gd")
-const MapScreen := preload("res://scripts/ui/map_screen.gd")
 
-enum Mode { MENU, PLAYING, PAUSED, GARAGE, PHONE }
+enum Mode { MENU, PLAYING, PAUSED, GARAGE }
 
+const TOW_COST := 100        # valor do guincho (o app Telefone mostra este mesmo valor)
 const TRIGGER_RADIUS := 4.5   # distância ao acionador para o botão de interação aparecer
 
 var bike: Motorcycle
@@ -43,7 +43,6 @@ var guard: PerformanceGuard
 var ped: Pedestrian
 var on_foot: bool = false
 var phone: PhoneUi
-var map_screen: MapScreen
 var state: GameState
 var city_info: Dictionary = {}
 var settings  # autoload GameSettings (ou instância local se não existir)
@@ -53,8 +52,7 @@ var _return_mode: int = Mode.MENU
 var _garage_pos: Vector3 = Vector3.ZERO
 var _edit_bar: VBoxContainer
 var _interaction: Dictionary = {}
-var _pending_app: String = ""
-var _edit_from_phone: bool = false
+var _edit_from_game: bool = false
 
 
 func _ready() -> void:
@@ -137,7 +135,8 @@ func _ready() -> void:
 	gfx = GraphicsManager.new()
 	gfx.name = "Graphics"
 	add_child(gfx)
-	gfx.setup(city_info["sun"], cam.camera, traffic, day, get_viewport())
+	gfx.setup(city_info["sun"], cam.camera, traffic, day, get_viewport(), city_info["env"], bike)
+	gfx.configure(settings.render_scale, settings.view_distance, settings.shadows, settings.effects)
 	gfx.apply(GraphicsManager.level_for_setting(settings.quality))
 	traffic.set_density(mini(settings.traffic_density, gfx.traffic_cap()))
 	guard = PerformanceGuard.new()
@@ -147,6 +146,9 @@ func _ready() -> void:
 	guard.enabled = settings.quality == 0
 	guard.quality_reduced.connect(_on_quality_reduced)
 	touch.offsets = settings.control_offsets.duplicate()
+	touch.control_scale = settings.control_scale
+	cam.orbit_sensitivity = 0.35 * settings.camera_sensitivity
+	hud.set_minimap_visible(settings.show_minimap)
 
 	var menus := CanvasLayer.new()
 	menus.layer = 20
@@ -162,16 +164,13 @@ func _ready() -> void:
 	garage.bike = bike
 	menus.add_child(garage)
 	_build_edit_bar(menus)
-	map_screen = MapScreen.new()
-	menus.add_child(map_screen)
-	map_screen.setup(bike, city_info, traffic, missions)
 	var phone_layer := CanvasLayer.new()
 	phone_layer.layer = 15
 	phone_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(phone_layer)
 	phone = PhoneUi.new()
+	phone.main = self
 	phone_layer.add_child(phone)
-	menu.player_node = bike
 
 	touch.camera_drag.connect(cam.orbit)
 	touch.camera_zoom.connect(cam.zoom)
@@ -180,12 +179,9 @@ func _ready() -> void:
 	touch.respawn_pressed.connect(_on_respawn_pressed)
 	touch.mount_pressed.connect(_on_mount_pressed)
 	touch.interact_pressed.connect(_on_interact_pressed)
-	touch.phone_pressed.connect(_open_phone)
-	phone.app_pressed.connect(_on_phone_app)
+	touch.phone_pressed.connect(_toggle_phone)
 	phone.closed.connect(_on_phone_closed)
-	map_screen.closed.connect(_start_playing)
-	menu.map_requested.connect(_open_map_from_menu)
-	menu.tow_requested.connect(_on_tow_requested)
+	phone.action_requested.connect(_on_phone_action)
 	ped.stepped.connect(audio.play_step)
 	ped.mount_finished.connect(_finish_mount)
 	ped.lift_finished.connect(_finish_lift)
@@ -200,7 +196,7 @@ func _ready() -> void:
 	touch.layout_changed.connect(_on_layout_changed)
 	menu.edit_controls_requested.connect(_enter_edit_controls)
 	state.money_changed.connect(hud.set_money)
-	missions.carrying_changed.connect(bike.set_carrying)
+	missions.carrying_changed.connect(_on_carrying_changed)
 	missions.started.connect(_on_mission_started)
 	missions.completed.connect(_on_mission_completed)
 	missions.failed.connect(_on_mission_failed)
@@ -238,6 +234,8 @@ func _physics_process(_delta: float) -> void:
 		ped.input_run = touch.run or Input.is_key_pressed(KEY_SHIFT)
 		ped.view_yaw = cam.get_view_yaw()
 		_zero_bike_inputs()
+		cam.view_pitch = 0.0
+		cam.fp_roll = 0.0
 		if ped.state == Pedestrian.State.LIFT:
 			bike.set_lift_progress(ped.lift_progress)
 		return
@@ -250,6 +248,7 @@ func _physics_process(_delta: float) -> void:
 	bike.input_balance = touch.balance or Input.is_key_pressed(KEY_B)
 	bike.input_drift = touch.drift or Input.is_key_pressed(KEY_X)
 	cam.view_pitch = bike.pitch - bike.stoppie
+	cam.fp_roll = -bike.lean * 0.5
 
 
 func _zero_bike_inputs() -> void:
@@ -271,6 +270,13 @@ func _process(_delta: float) -> void:
 	hud.set_objective(missions.objective_text())
 	hud.set_clock(day.clock_text())
 	_update_interaction()
+	touch.blocked_rect = phone.screen_rect()
+	ped.phone_target = on_foot and phone.is_open()
+	cam.head_node = ped.human.head_node if on_foot else bike.rider_head()
+	var bike_head := bike.rider_head()
+	if bike_head != null:
+		bike_head.visible = not (cam.first_person and not on_foot)
+	ped.human.head_node.visible = not (cam.first_person and on_foot)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -286,10 +292,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			KEY_ESCAPE:
 				_pause()
 			KEY_P:
-				if mode == Mode.PHONE:
-					phone.close()
-				else:
-					_open_phone()
+				_toggle_phone()
 
 
 # ------------------------------------------------------------- fluxo de telas
@@ -304,7 +307,6 @@ func _touch_enabled(on: bool) -> void:
 
 func _enter_menu() -> void:
 	phone.hide_now()
-	map_screen.close()
 	mode = Mode.MENU
 	get_tree().paused = true
 	cam.showroom = true
@@ -316,7 +318,6 @@ func _enter_menu() -> void:
 
 func _start_playing() -> void:
 	phone.hide_now()
-	map_screen.close()
 	mode = Mode.PLAYING
 	get_tree().paused = false
 	cam.showroom = false
@@ -330,6 +331,8 @@ func _start_playing() -> void:
 func _pause() -> void:
 	if mode != Mode.PLAYING:
 		return
+	phone.hide_now()
+	ped.phone_target = false
 	mode = Mode.PAUSED
 	get_tree().paused = true
 	_touch_enabled(false)
@@ -388,88 +391,64 @@ func _close_garage() -> void:
 
 # ------------------------------------------------------------------- celular
 
+## O celular faz parte da jogabilidade: abrir ou usar um app NÃO pausa o jogo.
 func _open_phone() -> void:
-	if mode != Mode.PLAYING:
+	if mode != Mode.PLAYING or phone.is_open():
 		return
-	mode = Mode.PHONE
-	_pending_app = ""
-	get_tree().paused = true
-	_touch_enabled(false)
 	phone.open()
+	ped.phone_target = on_foot
 
 
-func _on_phone_app(app: String) -> void:
-	_pending_app = app
-	phone.close()
+func _toggle_phone() -> void:
+	if phone.is_open():
+		phone.close()
+	else:
+		_open_phone()
 
 
 func _on_phone_closed() -> void:
-	var app := _pending_app
-	_pending_app = ""
-	if app == "":
-		_start_playing()
-	else:
-		_launch_app(app)
+	ped.phone_target = false
 
 
-## Cada ícone do celular abre uma função (sem passar pelo menu de pausa).
-func _launch_app(app: String) -> void:
-	menu.in_game = true
-	match app:
-		"mapa":
-			map_screen.open()
-		"entregas":
-			menu.open_from_phone("deliveries")
-		"corridas":
-			menu.open_from_phone("missions")
-		"ligacoes":
-			menu.open_from_phone("calls")
-		"configuracoes":
-			menu.open_from_phone("settings")
-		"camera":
-			_take_photo()
-		_:
-			_start_playing()
+func _on_phone_action(action: String) -> void:
+	if action == "camera":
+		_take_photo()
 
 
-func _open_map_from_menu() -> void:
-	menu.close()
-	map_screen.open()
-
-
-## Guincho: traz a moto até o personagem a pé (cobra uma taxa).
-func _on_tow_requested() -> void:
+## Guincho (app Telefone): traz a moto até o personagem a pé e cobra o valor mostrado no app.
+func call_tow() -> void:
 	if not on_foot:
-		menu.set_status("Você já está pilotando a moto.")
+		hud.show_message("Você já está pilotando a moto")
 		return
 	if ped.global_position.distance_to(bike.global_position) < 10.0:
-		menu.set_status("Sua moto já está por perto.")
+		hud.show_message("Sua moto já está por perto")
 		return
-	if not state.spend(MenuUi.TOW_COST):
-		menu.set_status("Dinheiro insuficiente para o guincho.")
+	if not state.spend(TOW_COST):
+		hud.show_message("Dinheiro insuficiente para o guincho")
 		return
 	state.save_game()
 	var place := ped.global_position + ped.global_transform.basis * Vector3(1.6, 0.1, -0.6)
 	bike.tow_to(Transform3D(Basis(Vector3.UP, ped.rotation.y), place))
 	bike.parked = true
 	bike.set_rider_visible(false)
-	_start_playing()
-	hud.show_message("Guincho entregou sua moto  -" + GameState.format_money(MenuUi.TOW_COST))
+	hud.show_message("Guincho entregou sua moto  -" + GameState.format_money(TOW_COST))
 
 
 ## Câmera do celular: esconde a interface, captura a tela e salva a foto.
 func _take_photo() -> void:
+	phone.hide_now()
+	ped.phone_target = false
 	hud.visible = false
 	touch.visible = false
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()
 	hud.visible = true
+	touch.visible = true
 	var path := ""
 	if img != null:
 		path = _save_photo(img)
 	audio.play_shutter()
-	_start_playing()
 	_flash()
 	hud.show_message(("Foto salva em: " + path) if path != "" else "Não foi possível salvar a foto")
 
@@ -504,11 +483,24 @@ func _flash() -> void:
 	tw.tween_callback(layer.queue_free)
 
 
+## Posição do jogador (a pé ou na moto), usada pelos apps do celular.
+func player_position() -> Vector3:
+	return active_player().global_position
+
+
+func active_player() -> Node3D:
+	return ped if on_foot else bike
+
+
+func apply_settings_change(save: bool) -> void:
+	_apply_settings(save)
+
+
 # ------------------------------------------------ botão de interação (acionadores)
 
 ## Descobre se o jogador está parado sobre um acionador e qual nome o botão deve ter:
-## GARAGEM (garagem, só de moto), ENTREGA (hamburgueria, sem missão ativa) ou
-## ENTREGAR (casa de destino da entrega em andamento).
+## GARAGEM (garagem, só de moto) ou COLETAR (hamburgueria da entrega aceita no app Entregas).
+## A entrega ao cliente NÃO usa este botão: é feita pelo botão ENTREGAR dentro do app.
 func _compute_interaction() -> Dictionary:
 	if mode != Mode.PLAYING:
 		return {}
@@ -526,10 +518,8 @@ func _compute_interaction() -> Dictionary:
 		var id: String = p["id"]
 		if id == "garagem" and not on_foot:
 			return {"label": "GARAGEM", "kind": "garage", "id": id}
-		if id.begins_with("hamburgueria_") and not missions.is_active():
-			return {"label": "ENTREGA", "kind": "pickup", "id": id}
-		if id.begins_with("casa_") and missions.can_deliver_at(id):
-			return {"label": "ENTREGAR", "kind": "deliver", "id": id}
+		if id.begins_with("hamburgueria_") and missions.can_pickup_at(id):
+			return {"label": "COLETAR", "kind": "pickup", "id": id}
 	return {}
 
 
@@ -544,10 +534,8 @@ func _on_interact_pressed() -> void:
 		"garage":
 			_open_garage()
 		"pickup":
-			missions.start_delivery(str(_interaction["id"]))
-		"deliver":
-			var actor: Node3D = ped if on_foot else bike
-			missions.deliver(actor.global_position)
+			if missions.pickup():
+				hud.show_message("Pedido coletado! Leve até a " + str(missions.poi_names.get(missions.active["to"], "")))
 
 
 # ------------------------------------------- a pé: descer, subir, cair, levantar
@@ -621,8 +609,6 @@ func _set_player(node: Node3D) -> void:
 	missions.tracker = node
 	hud.set_tracking(node)
 	day.set_focus(node)
-	menu.player_node = node
-	map_screen.set_tracking(node)
 
 
 func _begin_lift() -> void:
@@ -693,9 +679,17 @@ func _build_edit_bar(parent: Node) -> void:
 	parent.add_child(_edit_bar)
 
 
+func begin_edit_controls_from_phone() -> void:
+	phone.hide_now()
+	ped.phone_target = false
+	_enter_edit_controls()
+
+
 func _enter_edit_controls() -> void:
-	_edit_from_phone = menu.phone_origin
+	_edit_from_game = mode == Mode.PLAYING
 	menu.close()
+	if _edit_from_game:
+		get_tree().paused = true   # o editor de botões pausa para ninguém bater a moto enquanto arrasta
 	_touch_enabled(true)
 	touch.edit_mode = true
 	_edit_bar.visible = true
@@ -704,12 +698,12 @@ func _enter_edit_controls() -> void:
 func _finish_edit_controls() -> void:
 	touch.edit_mode = false
 	_edit_bar.visible = false
-	_touch_enabled(false)
 	settings.control_offsets = touch.offsets.duplicate()
 	settings.save_settings()
-	if _edit_from_phone:
-		menu.open_from_phone("settings")
+	if _edit_from_game:
+		_start_playing()
 	else:
+		_touch_enabled(false)
 		menu.open("settings")
 
 
@@ -725,15 +719,26 @@ func _on_quality_reduced(level: int) -> void:
 
 # --------------------------------------------------------------- configurações
 
-func _apply_settings() -> void:
+func _on_carrying_changed(on: bool) -> void:
+	bike.set_carrying(on)
+	ped.set_carrying(on)
+
+
+func _apply_settings(save: bool = true) -> void:
 	touch.steer_sensitivity = settings.steer_sensitivity
 	touch.ui_opacity = settings.control_opacity
+	touch.control_scale = settings.control_scale
+	cam.orbit_sensitivity = 0.35 * settings.camera_sensitivity
+	cam.first_person = settings.camera_first_person
+	hud.set_minimap_visible(settings.show_minimap)
+	gfx.configure(settings.render_scale, settings.view_distance, settings.shadows, settings.effects)
 	audio.apply_volumes(settings.volume_master, settings.volume_sfx, settings.volume_ambient)
 	guard.enabled = settings.quality == 0
 	gfx.apply(GraphicsManager.level_for_setting(settings.quality))
 	traffic.set_density(mini(settings.traffic_density, gfx.traffic_cap()))
 	day.day_minutes = settings.day_minutes
-	settings.save_settings()
+	if save:
+		settings.save_settings()
 
 
 func _toggle_view() -> void:
