@@ -88,7 +88,8 @@ func _ready() -> void:
 	_map_host.position = MAP_AREA.position
 	_map_host.size = MAP_AREA.size
 	_map_host.clip_contents = true
-	_map_host.mouse_filter = Control.MOUSE_FILTER_PASS
+	_map_host.mouse_filter = Control.MOUSE_FILTER_IGNORE   # não pode interceptar toques dos outros apps
+	_map_host.visible = false
 	_device.add_child(_map_host)
 
 	_overlay = Control.new()
@@ -131,6 +132,8 @@ func go_home() -> void:
 		_tex_rect.texture = _tex_home
 	for k in _apps:
 		(_apps[k] as Control).visible = false
+	if _map_host != null:
+		_map_host.visible = false
 
 
 ## HOME dentro de um app: tela inicial instantânea; o mapa desfaz zoom e giro gradualmente.
@@ -155,6 +158,7 @@ func open_app(app_name: String) -> void:
 	for k in _apps:
 		(_apps[k] as Control).visible = (k == app_name)
 	_want_zoom = app_name == "mapa"
+	_map_host.visible = app_name == "mapa"
 	node.on_open()
 
 

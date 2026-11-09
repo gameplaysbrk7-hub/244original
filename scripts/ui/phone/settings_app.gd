@@ -49,6 +49,7 @@ func _build() -> void:
 
 func _category_button(cat: Dictionary) -> void:
 	var b := Button.new()
+	b.name = "cat_" + str(cat["id"])
 	b.custom_minimum_size = Vector2(448, 108)
 	b.add_theme_stylebox_override("normal", Kit.style(Color(0.12, 0.14, 0.22, 0.95), 16))
 	b.add_theme_stylebox_override("hover", Kit.style(Color(0.16, 0.18, 0.28, 0.95), 16))

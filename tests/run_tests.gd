@@ -349,9 +349,11 @@ func _test_camera_and_main() -> void:
 
 	# ----- configurações dentro do celular -----
 	m.phone.open_app("configuracoes")
+	for i in 3:
+		m.phone._process(0.2)
 	var sa: Control = m.phone.current_app()
-	sa._open_page("graficos")
-	check("configurações: categorias abrem subpáginas", sa._page == "graficos")
+	_click(sa.find_child("cat_graficos", true, false) as Control)
+	check("configurações: tocar de verdade numa categoria abre a subpágina", sa._page == "graficos")
 	m.phone._on_device_input(_tap(PhoneUi.BACK_CENTER))
 	check("celular: botão voltar sai da subpágina e continua no app", sa._page == "" and m.phone.app == "configuracoes")
 	sa.set_value("shadows", 1)
@@ -394,7 +396,17 @@ func _test_camera_and_main() -> void:
 	var mm = m.missions
 	m._open_phone()
 	m.phone.open_app("entregas")
+	for i in 3:
+		m.phone._process(0.2)
 	var da: Control = m.phone.current_app()
+	var above_ok := true
+	var after_apps := false
+	for child in m.phone._device.get_children():
+		if child == m.phone._app_host:
+			after_apps = true
+		elif after_apps and (child as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			above_ok = false
+	check("celular: nada por cima da área dos apps intercepta os toques dos botões", above_ok)
 	var dtexts := _button_texts(da)
 	check("entregas: uma única oferta com ACEITAR e RECUSAR", (not mm.delivery_offer.is_empty()) and dtexts.has("ACEITAR") and dtexts.has("RECUSAR"))
 	var d_prev: String = str(mm.delivery_offer["id"])
@@ -407,8 +419,8 @@ func _test_camera_and_main() -> void:
 	check("entregas: recusar várias vezes seguidas sempre mostra outra oferta", d_ok)
 	var dest_id: String = str(mm.delivery_offer["to"])
 	var from_id: String = str(mm.delivery_offer["from"])
-	da._accept()
-	check("entregas: aceitar registra a entrega ativa", mm.is_delivery_active() and mm.stage == 0)
+	_click(_find_button(da, "ACEITAR", false))
+	check("entregas: tocar de verdade em ACEITAR registra a entrega ativa", mm.is_delivery_active() and mm.stage == 0)
 	var from_at: Vector3 = mm.poi_positions[from_id]
 	var dest_at: Vector3 = mm.poi_positions[dest_id]
 	check("entregas: não é possível entregar antes de coletar", not mm.deliver(dest_at))
@@ -467,8 +479,10 @@ func _test_camera_and_main() -> void:
 	for k in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "#"]:
 		all_keys = all_keys and keys.has(k)
 	check("telefone: teclado com 0 a 9, * e #", all_keys)
-	_find_button(dial, "5", false).pressed.emit()
-	check("telefone: cada tecla toca o seu som", m.audio._keys.has("5") and m.audio._ui.stream == m.audio._keys["5"])
+	for i in 3:
+		m.phone._process(0.2)
+	_click(_find_button(dial, "5", false))
+	check("telefone: cada tecla toca o seu som (toque de verdade)", m.audio._keys.has("5") and m.audio._ui.stream == m.audio._keys["5"])
 	var tow_button := _find_button(dial, "GUINCHO", true)
 	check("telefone: o contato GUINCHO mostra o valor realmente cobrado", tow_button != null and tow_button.text.contains(GameState.format_money(m.TOW_COST)))
 	m.phone.hide_now()
@@ -498,8 +512,10 @@ func _test_camera_and_main() -> void:
 	await _frames(3)
 	m._open_phone()
 	m.phone.open_app("ligacoes")
-	_find_button(m.phone.current_app(), "GUINCHO", true).pressed.emit()
-	check("guincho: pelo app traz a moto até o personagem, cobra e fecha o celular", m.state.money == 400 and m.bike.global_position.distance_to(m.ped.global_position) < 4.0 and m.bike.parked and (not m.bike.fallen) and not m.phone.is_open())
+	for i in 3:
+		m.phone._process(0.2)
+	_click(_find_button(m.phone.current_app(), "GUINCHO", true))
+	check("guincho: tocando de verdade no contato, pelo app traz a moto até o personagem, cobra e fecha o celular", m.state.money == 400 and m.bike.global_position.distance_to(m.ped.global_position) < 4.0 and m.bike.parked and (not m.bike.fallen) and not m.phone.is_open())
 	for i in 3:
 		m.phone._process(0.2)
 	var photo_path: String = m._save_photo(Image.create(32, 32, false, Image.FORMAT_RGB8))
@@ -1131,6 +1147,26 @@ func _test_phone_ui() -> void:
 	check("celular: imagens do celular e do botão carregam", load("res://assets/ui/phone.png") is Texture2D and load("res://assets/ui/phone_button.png") is Texture2D and load("res://assets/ui/phone_app.png") is Texture2D)
 	ph.queue_free()
 	await _frames(2)
+
+
+## Clica de verdade no controle (mesmo caminho do toque do jogador: o sistema de interface decide
+## quem recebe o clique). Pega erros como um controle invisível interceptando os botões.
+func _click(c: Control) -> void:
+	var pos := c.get_global_transform() * (c.size * 0.5)
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.button_mask = MOUSE_BUTTON_MASK_LEFT
+	down.position = pos
+	down.global_position = pos
+	root.push_input(down)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.button_mask = 0
+	up.position = pos
+	up.global_position = pos
+	root.push_input(up)
 
 
 func _tap(pos: Vector2) -> InputEventMouseButton:
